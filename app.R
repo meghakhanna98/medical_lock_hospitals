@@ -93,15 +93,38 @@ ui <- dashboardPage(
       tabItem(tabName = "tables",
         fluidRow(
           box(
-            title = "Select Table to View", status = "primary", solidHeader = TRUE,
+            title = "Data Tables - View & Edit", status = "primary", solidHeader = TRUE,
             width = 12,
-            selectInput("table_select", "Choose Table:",
-              choices = c("documents", "stations", "station_reports", 
-                         "women_data", "troop_data", "hospital_operations"),
-              selected = "documents"
+            fluidRow(
+              column(6,
+                selectInput("table_select", "Choose Table:",
+                  choices = c("documents", "stations", "station_reports", 
+                             "women_data", "troop_data", "hospital_operations"),
+                  selected = "documents"
+                )
+              ),
+              column(6,
+                br(),
+                actionButton("add_record", "Add New Record", class = "btn-success"),
+                actionButton("refresh_table", "Refresh", class = "btn-info")
+              )
             ),
             br(),
-            DT::dataTableOutput("data_table")
+            DT::dataTableOutput("data_table"),
+            br(),
+            # Edit Record Panel
+            conditionalPanel(
+              condition = "input.data_table_rows_selected.length > 0",
+              box(
+                title = "Edit Selected Record", status = "warning", solidHeader = TRUE,
+                width = 12,
+                uiOutput("edit_form"),
+                br(),
+                actionButton("save_record", "Save Changes", class = "btn-primary"),
+                actionButton("delete_record", "Delete Record", class = "btn-danger"),
+                actionButton("cancel_edit", "Cancel", class = "btn-secondary")
+              )
+            )
           )
         )
       ),
@@ -316,12 +339,339 @@ server <- function(input, output, session) {
   output$data_table <- DT::renderDataTable({
     query <- paste("SELECT * FROM", input$table_select)
     data <- dbGetQuery(conn(), query)
-    DT::datatable(data, options = list(
-      pageLength = 25,
-      scrollX = TRUE,
-      dom = 'Bfrtip',
-      buttons = c('copy', 'csv', 'excel', 'pdf', 'print')
-    ), extensions = 'Buttons')
+    DT::datatable(data, 
+      options = list(
+        pageLength = 25,
+        scrollX = TRUE,
+        dom = 'Bfrtip',
+        buttons = c('copy', 'csv', 'excel', 'pdf', 'print')
+      ), 
+      extensions = 'Buttons',
+      selection = 'single'
+    )
+  })
+  
+  # Get foreign key relationships
+  get_foreign_keys <- function(table_name) {
+    fk_info <- list()
+    
+    if (table_name == "station_reports") {
+      fk_info$doc_id <- dbGetQuery(conn(), "SELECT doc_id, source_name FROM documents ORDER BY source_name")
+      fk_info$station_id <- dbGetQuery(conn(), "SELECT station_id, name FROM stations ORDER BY name")
+    } else if (table_name == "women_data") {
+      fk_info$doc_id <- dbGetQuery(conn(), "SELECT doc_id, source_name FROM documents ORDER BY source_name")
+    } else if (table_name == "troop_data") {
+      fk_info$doc_id <- dbGetQuery(conn(), "SELECT doc_id, source_name FROM documents ORDER BY source_name")
+    } else if (table_name == "hospital_operations") {
+      fk_info$doc_id <- dbGetQuery(conn(), "SELECT doc_id, source_name FROM documents ORDER BY source_name")
+    }
+    
+    return(fk_info)
+  }
+  
+  # Get table schema
+  get_table_schema <- function(table_name) {
+    schema <- dbGetQuery(conn(), paste("PRAGMA table_info(", table_name, ")"))
+    return(schema)
+  }
+  
+  # Edit form UI
+  output$edit_form <- renderUI({
+    if (length(input$data_table_rows_selected) == 0) return(NULL)
+    
+    table_name <- input$table_select
+    schema <- get_table_schema(table_name)
+    fk_data <- get_foreign_keys(table_name)
+    
+    # Get current record data
+    query <- paste("SELECT * FROM", table_name, "LIMIT 1 OFFSET", input$data_table_rows_selected - 1)
+    current_data <- dbGetQuery(conn(), query)
+    
+    # Create form inputs
+    form_inputs <- list()
+    
+    for (i in 1:nrow(schema)) {
+      col_name <- schema$name[i]
+      col_type <- schema$type[i]
+      is_pk <- schema$pk[i] == 1
+      current_value <- current_data[[col_name]]
+      
+      # Skip auto-increment primary keys
+      if (is_pk && col_type == "INTEGER") {
+        next
+      }
+      
+      # Handle foreign key lookups
+      if (col_name %in% names(fk_data)) {
+        choices <- setNames(fk_data[[col_name]][[1]], fk_data[[col_name]][[2]])
+        form_inputs[[length(form_inputs) + 1]] <- selectInput(
+          paste0("edit_", col_name),
+          paste0(col_name, " (", names(fk_data)[which(names(fk_data) == col_name)], "):"),
+          choices = c("", choices),
+          selected = current_value
+        )
+      } else {
+        # Regular input based on column type
+        if (col_type == "INTEGER") {
+          form_inputs[[length(form_inputs) + 1]] <- numericInput(
+            paste0("edit_", col_name),
+            paste0(col_name, ":"),
+            value = ifelse(is.na(current_value), 0, current_value),
+            min = 0
+          )
+        } else if (col_type == "REAL") {
+          form_inputs[[length(form_inputs) + 1]] <- numericInput(
+            paste0("edit_", col_name),
+            paste0(col_name, ":"),
+            value = ifelse(is.na(current_value), 0, current_value),
+            step = 0.01
+          )
+        } else {
+          form_inputs[[length(form_inputs) + 1]] <- textInput(
+            paste0("edit_", col_name),
+            paste0(col_name, ":"),
+            value = ifelse(is.na(current_value), "", current_value)
+          )
+        }
+      }
+    }
+    
+    # Arrange inputs in columns
+    fluidRow(
+      column(6, form_inputs[1:ceiling(length(form_inputs)/2)]),
+      column(6, form_inputs[(ceiling(length(form_inputs)/2)+1):length(form_inputs)])
+    )
+  })
+  
+  # Add new record
+  observeEvent(input$add_record, {
+    table_name <- input$table_select
+    schema <- get_table_schema(table_name)
+    fk_data <- get_foreign_keys(table_name)
+    
+    # Create form inputs for new record
+    form_inputs <- list()
+    
+    for (i in 1:nrow(schema)) {
+      col_name <- schema$name[i]
+      col_type <- schema$type[i]
+      is_pk <- schema$pk[i] == 1
+      
+      # Skip auto-increment primary keys
+      if (is_pk && col_type == "INTEGER") {
+        next
+      }
+      
+      # Handle foreign key lookups
+      if (col_name %in% names(fk_data)) {
+        choices <- setNames(fk_data[[col_name]][[1]], fk_data[[col_name]][[2]])
+        form_inputs[[length(form_inputs) + 1]] <- selectInput(
+          paste0("new_", col_name),
+          paste0(col_name, " (", names(fk_data)[which(names(fk_data) == col_name)], "):"),
+          choices = c("", choices),
+          selected = ""
+        )
+      } else {
+        # Regular input based on column type
+        if (col_type == "INTEGER") {
+          form_inputs[[length(form_inputs) + 1]] <- numericInput(
+            paste0("new_", col_name),
+            paste0(col_name, ":"),
+            value = 0,
+            min = 0
+          )
+        } else if (col_type == "REAL") {
+          form_inputs[[length(form_inputs) + 1]] <- numericInput(
+            paste0("new_", col_name),
+            paste0(col_name, ":"),
+            value = 0,
+            step = 0.01
+          )
+        } else {
+          form_inputs[[length(form_inputs) + 1]] <- textInput(
+            paste0("new_", col_name),
+            paste0(col_name, ":"),
+            value = ""
+          )
+        }
+      }
+    }
+    
+    # Show modal dialog for new record
+    showModal(modalDialog(
+      title = paste("Add New Record to", table_name),
+      fluidRow(
+        column(6, form_inputs[1:ceiling(length(form_inputs)/2)]),
+        column(6, form_inputs[(ceiling(length(form_inputs)/2)+1):length(form_inputs)])
+      ),
+      footer = tagList(
+        actionButton("save_new_record", "Save", class = "btn-primary"),
+        modalButton("Cancel")
+      ),
+      size = "l"
+    ))
+  })
+  
+  # Save new record
+  observeEvent(input$save_new_record, {
+    table_name <- input$table_select
+    schema <- get_table_schema(table_name)
+    
+    # Collect form data
+    values <- list()
+    columns <- c()
+    
+    for (i in 1:nrow(schema)) {
+      col_name <- schema$name[i]
+      col_type <- schema$type[i]
+      is_pk <- schema$pk[i] == 1
+      
+      # Skip auto-increment primary keys
+      if (is_pk && col_type == "INTEGER") {
+        next
+      }
+      
+      input_name <- paste0("new_", col_name)
+      value <- input[[input_name]]
+      
+      if (!is.null(value) && value != "") {
+        columns <- c(columns, col_name)
+        values <- c(values, value)
+      }
+    }
+    
+    if (length(values) > 0) {
+      # Build INSERT query
+      placeholders <- paste(rep("?", length(values)), collapse = ", ")
+      query <- paste("INSERT INTO", table_name, "(", paste(columns, collapse = ", "), ") VALUES (", placeholders, ")")
+      
+      tryCatch({
+        dbExecute(conn(), query, params = values)
+        removeModal()
+        showNotification("Record added successfully!", type = "success")
+      }, error = function(e) {
+        showNotification(paste("Error adding record:", e$message), type = "error")
+      })
+    }
+  })
+  
+  # Save edited record
+  observeEvent(input$save_record, {
+    if (length(input$data_table_rows_selected) == 0) return(NULL)
+    
+    table_name <- input$table_select
+    schema <- get_table_schema(table_name)
+    
+    # Get current record data to identify primary key
+    query <- paste("SELECT * FROM", table_name, "LIMIT 1 OFFSET", input$data_table_rows_selected - 1)
+    current_data <- dbGetQuery(conn(), query)
+    
+    # Collect form data
+    values <- list()
+    columns <- c()
+    pk_column <- NULL
+    pk_value <- NULL
+    
+    for (i in 1:nrow(schema)) {
+      col_name <- schema$name[i]
+      col_type <- schema$type[i]
+      is_pk <- schema$pk[i] == 1
+      
+      if (is_pk) {
+        pk_column <- col_name
+        pk_value <- current_data[[col_name]]
+        next
+      }
+      
+      input_name <- paste0("edit_", col_name)
+      value <- input[[input_name]]
+      
+      if (!is.null(value)) {
+        columns <- c(columns, col_name)
+        values <- c(values, value)
+      }
+    }
+    
+    if (length(values) > 0 && !is.null(pk_column)) {
+      # Build UPDATE query
+      set_clause <- paste(paste(columns, "= ?", collapse = ", "))
+      query <- paste("UPDATE", table_name, "SET", set_clause, "WHERE", pk_column, "= ?")
+      
+      tryCatch({
+        dbExecute(conn(), query, params = c(values, pk_value))
+        showNotification("Record updated successfully!", type = "success")
+      }, error = function(e) {
+        showNotification(paste("Error updating record:", e$message), type = "error")
+      })
+    }
+  })
+  
+  # Delete record
+  observeEvent(input$delete_record, {
+    if (length(input$data_table_rows_selected) == 0) return(NULL)
+    
+    table_name <- input$table_select
+    schema <- get_table_schema(table_name)
+    
+    # Get current record data to identify primary key
+    query <- paste("SELECT * FROM", table_name, "LIMIT 1 OFFSET", input$data_table_rows_selected - 1)
+    current_data <- dbGetQuery(conn(), query)
+    
+    # Find primary key
+    pk_column <- schema$name[schema$pk == 1][1]
+    pk_value <- current_data[[pk_column]]
+    
+    if (!is.null(pk_column) && !is.null(pk_value)) {
+      # Show confirmation dialog
+      showModal(modalDialog(
+        title = "Confirm Deletion",
+        paste("Are you sure you want to delete this record from", table_name, "?"),
+        footer = tagList(
+          actionButton("confirm_delete", "Delete", class = "btn-danger"),
+          modalButton("Cancel")
+        )
+      ))
+    }
+  })
+  
+  # Confirm delete
+  observeEvent(input$confirm_delete, {
+    if (length(input$data_table_rows_selected) == 0) return(NULL)
+    
+    table_name <- input$table_select
+    schema <- get_table_schema(table_name)
+    
+    # Get current record data to identify primary key
+    query <- paste("SELECT * FROM", table_name, "LIMIT 1 OFFSET", input$data_table_rows_selected - 1)
+    current_data <- dbGetQuery(conn(), query)
+    
+    # Find primary key
+    pk_column <- schema$name[schema$pk == 1][1]
+    pk_value <- current_data[[pk_column]]
+    
+    if (!is.null(pk_column) && !is.null(pk_value)) {
+      query <- paste("DELETE FROM", table_name, "WHERE", pk_column, "= ?")
+      
+      tryCatch({
+        dbExecute(conn(), query, params = pk_value)
+        removeModal()
+        showNotification("Record deleted successfully!", type = "success")
+      }, error = function(e) {
+        showNotification(paste("Error deleting record:", e$message), type = "error")
+      })
+    }
+  })
+  
+  # Cancel edit
+  observeEvent(input$cancel_edit, {
+    # Clear selection
+    DT::dataTableProxy("data_table") %>% DT::selectRows(NULL)
+  })
+  
+  # Refresh table
+  observeEvent(input$refresh_table, {
+    # Trigger table refresh
+    DT::dataTableProxy("data_table") %>% DT::reloadData()
   })
   
   # Data Cleaning - Duplicate Detection

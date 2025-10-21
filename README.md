@@ -15,6 +15,10 @@ This application provides an interactive interface to work with the `medical_loc
 
 ### 📋 Data Tables Explorer
 - **Interactive Tables**: Browse all six database tables with search and pagination
+- **Record Editing**: Click any row to edit individual records with real-time validation
+- **Foreign Key Lookups**: Dropdown menus show related data (e.g., document names for doc_id fields)
+- **Add New Records**: Create new entries with automatic form generation
+- **Delete Records**: Remove entries with confirmation dialogs
 - **Export Capabilities**: Download data in CSV, Excel, or JSON formats
 - **Real-time Filtering**: Search and filter data dynamically
 
@@ -98,7 +102,10 @@ shiny::runApp("app.R")
 
 ### Data Tables Tab
 - Select any table from the dropdown
-- Use the built-in search and pagination features
+- **Click on any row to edit it** - forms appear automatically
+- **Foreign key columns show dropdowns** with related data (e.g., document names)
+- Use "Add New Record" to create new entries
+- Use "Delete Record" to remove entries (with confirmation)
 - Export data directly from the interface
 
 ### Data Cleaning Tab
