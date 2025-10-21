@@ -22,12 +22,6 @@ This application provides an interactive interface to work with the `medical_loc
 - **Export Capabilities**: Download data in CSV, Excel, or JSON formats
 - **Real-time Filtering**: Search and filter data dynamically
 
-### 🧹 Data Cleaning Tools
-- **Duplicate Detection**: Identify and manage duplicate records
-- **Data Validation**: Check for NULL values, empty strings, and data inconsistencies
-- **Advanced Filtering**: Custom search and filter capabilities
-- **Data Quality Reports**: Comprehensive validation results
-
 ### 📈 Visualizations
 - **Temporal Analysis**: Time-series plots showing data trends over years
 - **Geographic Analysis**: Regional distribution and country-based analysis
@@ -107,11 +101,6 @@ shiny::runApp("app.R")
 - Use "Add New Record" to create new entries
 - Use "Delete Record" to remove entries (with confirmation)
 - Export data directly from the interface
-
-### Data Cleaning Tab
-- **Duplicate Detection**: Find records that appear multiple times
-- **Data Validation**: Check for common data quality issues
-- **Filter & Search**: Create custom views of your data
 
 ### Visualizations Tab
 - **Temporal Analysis**: Explore trends over time

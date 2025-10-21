@@ -28,7 +28,6 @@ ui <- dashboardPage(
     sidebarMenu(
       menuItem("Data Overview", tabName = "overview", icon = icon("dashboard")),
       menuItem("Data Tables", tabName = "tables", icon = icon("table")),
-      menuItem("Data Cleaning", tabName = "cleaning", icon = icon("broom")),
       menuItem("Visualizations", tabName = "visualizations", icon = icon("chart-bar")),
       menuItem("Data Export", tabName = "export", icon = icon("download"))
     )
@@ -129,50 +128,6 @@ ui <- dashboardPage(
         )
       ),
       
-      # Data Cleaning Tab
-      tabItem(tabName = "cleaning",
-        fluidRow(
-          box(
-            title = "Data Cleaning Tools", status = "success", solidHeader = TRUE,
-            width = 12,
-            tabsetPanel(
-              tabPanel("Duplicate Detection",
-                br(),
-                selectInput("clean_table_select", "Select Table:",
-                  choices = c("documents", "stations", "station_reports", 
-                             "women_data", "troop_data", "hospital_operations")
-                ),
-                actionButton("find_duplicates", "Find Duplicates", class = "btn-warning"),
-                br(), br(),
-                DT::dataTableOutput("duplicates_table")
-              ),
-              
-              tabPanel("Data Validation",
-                br(),
-                selectInput("validate_table_select", "Select Table:",
-                  choices = c("documents", "stations", "station_reports", 
-                             "women_data", "troop_data", "hospital_operations")
-                ),
-                actionButton("validate_data", "Validate Data", class = "btn-info"),
-                br(), br(),
-                verbatimTextOutput("validation_results")
-              ),
-              
-              tabPanel("Filter & Search",
-                br(),
-                selectInput("filter_table_select", "Select Table:",
-                  choices = c("documents", "stations", "station_reports", 
-                             "women_data", "troop_data", "hospital_operations")
-                ),
-                uiOutput("filter_controls"),
-                br(),
-                DT::dataTableOutput("filtered_table")
-              )
-            )
-          )
-        )
-      ),
-      
       # Visualizations Tab
       tabItem(tabName = "visualizations",
         fluidRow(
@@ -264,7 +219,7 @@ server <- function(input, output, session) {
   # Overview Tab - Value Boxes
   output$total_documents <- renderValueBox({
     count <- dbGetQuery(conn(), "SELECT COUNT(*) as count FROM documents")$count
-    valueBox(count, "Documents", icon = icon("file-alt"), color = "primary")
+    valueBox(count, "Documents", icon = icon("file-alt"), color = "red")
   })
   
   output$total_stations <- renderValueBox({
@@ -674,81 +629,6 @@ server <- function(input, output, session) {
     DT::dataTableProxy("data_table") %>% DT::reloadData()
   })
   
-  # Data Cleaning - Duplicate Detection
-  observeEvent(input$find_duplicates, {
-    table_name <- input$clean_table_select
-    
-    if (table_name == "documents") {
-      query <- paste("SELECT doc_id, source_name, type, COUNT(*) as count FROM", table_name, 
-                     "GROUP BY doc_id, source_name, type HAVING COUNT(*) > 1")
-    } else if (table_name == "stations") {
-      query <- paste("SELECT name, region, country, COUNT(*) as count FROM", table_name, 
-                     "GROUP BY name, region, country HAVING COUNT(*) > 1")
-    } else {
-      query <- paste("SELECT * FROM", table_name, "WHERE rowid NOT IN (SELECT MIN(rowid) FROM", table_name, "GROUP BY", 
-                     ifelse(table_name %in% c("women_data", "troop_data"), "unique_id", "hid"), ")")
-    }
-    
-    duplicates <- dbGetQuery(conn(), query)
-    output$duplicates_table <- DT::renderDataTable({
-      DT::datatable(duplicates, options = list(pageLength = 10))
-    })
-  })
-  
-  # Data Cleaning - Validation
-  observeEvent(input$validate_data, {
-    table_name <- input$validate_table_select
-    
-    validation_results <- paste("Validation Results for", table_name, ":\n\n")
-    
-    # Check for NULL values in key columns
-    if (table_name == "documents") {
-      null_check <- dbGetQuery(conn(), paste("SELECT COUNT(*) as count FROM", table_name, "WHERE doc_id IS NULL OR source_name IS NULL"))
-      validation_results <- paste(validation_results, "Records with NULL doc_id or source_name:", null_check$count, "\n")
-    } else if (table_name == "stations") {
-      null_check <- dbGetQuery(conn(), paste("SELECT COUNT(*) as count FROM", table_name, "WHERE name IS NULL"))
-      validation_results <- paste(validation_results, "Records with NULL name:", null_check$count, "\n")
-    }
-    
-    # Check for empty strings
-    empty_check <- dbGetQuery(conn(), paste("SELECT COUNT(*) as count FROM", table_name, "WHERE doc_id = '' OR source_name = ''"))
-    validation_results <- paste(validation_results, "Records with empty strings:", empty_check$count, "\n")
-    
-    output$validation_results <- renderText(validation_results)
-  })
-  
-  # Filter Controls
-  output$filter_controls <- renderUI({
-    table_name <- input$filter_table_select
-    
-    # Get column names for the selected table
-    columns <- dbGetQuery(conn(), paste("PRAGMA table_info(", table_name, ")"))$name
-    
-    fluidRow(
-      column(6,
-        selectInput("filter_column", "Filter Column:", choices = columns)
-      ),
-      column(6,
-        textInput("filter_value", "Filter Value:", placeholder = "Enter value to filter by")
-      )
-    )
-  })
-  
-  # Filtered Table
-  output$filtered_table <- DT::renderDataTable({
-    table_name <- input$filter_table_select
-    column <- input$filter_column
-    value <- input$filter_value
-    
-    if (!is.null(column) && !is.null(value) && value != "") {
-      query <- paste("SELECT * FROM", table_name, "WHERE", column, "LIKE '%", value, "%'")
-    } else {
-      query <- paste("SELECT * FROM", table_name)
-    }
-    
-    data <- dbGetQuery(conn(), query)
-    DT::datatable(data, options = list(pageLength = 25))
-  })
   
   # Visualizations - Temporal Analysis
   output$temporal_plot <- renderPlotly({
