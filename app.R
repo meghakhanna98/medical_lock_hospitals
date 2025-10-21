@@ -264,22 +264,22 @@ server <- function(input, output, session) {
   # Overview Tab - Value Boxes
   output$total_documents <- renderValueBox({
     count <- dbGetQuery(conn(), "SELECT COUNT(*) as count FROM documents")$count
-    valueBox(count, "Documents", icon = icon("file-alt"), color = "blue")
+    valueBox(count, "Documents", icon = icon("file-alt"), color = "primary")
   })
   
   output$total_stations <- renderValueBox({
     count <- dbGetQuery(conn(), "SELECT COUNT(*) as count FROM stations")$count
-    valueBox(count, "Stations", icon = icon("map-marker-alt"), color = "green")
+    valueBox(count, "Stations", icon = icon("map-marker-alt"), color = "success")
   })
   
   output$total_women_records <- renderValueBox({
     count <- dbGetQuery(conn(), "SELECT COUNT(*) as count FROM women_data")$count
-    valueBox(count, "Women Records", icon = icon("female"), color = "purple")
+    valueBox(count, "Women Records", icon = icon("female"), color = "info")
   })
   
   output$total_troop_records <- renderValueBox({
     count <- dbGetQuery(conn(), "SELECT COUNT(*) as count FROM troop_data")$count
-    valueBox(count, "Troop Records", icon = icon("users"), color = "orange")
+    valueBox(count, "Troop Records", icon = icon("users"), color = "warning")
   })
   
   # Data Quality Summary
@@ -548,7 +548,7 @@ server <- function(input, output, session) {
       tryCatch({
         dbExecute(conn(), query, params = values)
         removeModal()
-        showNotification("Record added successfully!", type = "success")
+        showNotification("Record added successfully!", type = "message")
       }, error = function(e) {
         showNotification(paste("Error adding record:", e$message), type = "error")
       })
@@ -599,7 +599,7 @@ server <- function(input, output, session) {
       
       tryCatch({
         dbExecute(conn(), query, params = c(values, pk_value))
-        showNotification("Record updated successfully!", type = "success")
+        showNotification("Record updated successfully!", type = "message")
       }, error = function(e) {
         showNotification(paste("Error updating record:", e$message), type = "error")
       })
@@ -655,7 +655,7 @@ server <- function(input, output, session) {
       tryCatch({
         dbExecute(conn(), query, params = pk_value)
         removeModal()
-        showNotification("Record deleted successfully!", type = "success")
+        showNotification("Record deleted successfully!", type = "message")
       }, error = function(e) {
         showNotification(paste("Error deleting record:", e$message), type = "error")
       })
