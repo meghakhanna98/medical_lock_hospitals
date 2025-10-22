@@ -93,6 +93,15 @@ def create_database():
             country TEXT,
             act TEXT,
             class TEXT,
+            staff_medical_officers INTEGER,
+            staff_hospital_assistants INTEGER,
+            staff_matron INTEGER,
+            staff_coolies INTEGER,
+            staff_peons INTEGER,
+            staff_watermen INTEGER,
+            ops_inspection_regularity TEXT,
+            ops_unlicensed_control_notes TEXT,
+            ops_committee_activity_notes TEXT,
             FOREIGN KEY (doc_id) REFERENCES documents (doc_id)
         )
     ''')
@@ -215,8 +224,11 @@ def extract_data_from_excel(conn, cursor):
             
         cursor.execute('''
             INSERT OR REPLACE INTO hospital_operations 
-            (hid, doc_id, source_name, source_type, year, region, station, country, act, class)
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            (hid, doc_id, source_name, source_type, year, region, station, country, act, class,
+             staff_medical_officers, staff_hospital_assistants, staff_matron, staff_coolies,
+             staff_peons, staff_watermen, ops_inspection_regularity, ops_unlicensed_control_notes,
+             ops_committee_activity_notes)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
         ''', (
             str(row[0]) if row[0] else None,  # hid
             str(row[1]) if row[1] else None,  # doc_id
@@ -227,7 +239,16 @@ def extract_data_from_excel(conn, cursor):
             str(row[6]) if row[6] else None,  # station
             str(row[7]) if row[7] else None,  # country
             str(row[8]) if row[8] else None,  # act
-            str(row[9]) if row[9] else None   # class
+            str(row[9]) if row[9] else None,  # class
+            int(row[10]) if row[10] and str(row[10]).isdigit() else None,  # staff_medical_officers
+            int(row[11]) if row[11] and str(row[11]).isdigit() else None,  # staff_hospital_assistants
+            int(row[12]) if row[12] and str(row[12]).isdigit() else None,  # staff_matron
+            int(row[13]) if row[13] and str(row[13]).isdigit() else None,  # staff_coolies
+            int(row[14]) if row[14] and str(row[14]).isdigit() else None,  # staff_peons
+            int(row[15]) if row[15] and str(row[15]).isdigit() else None,  # staff_watermen
+            str(row[16]) if row[16] else None,  # ops_inspection_regularity
+            str(row[17]) if row[17] else None,  # ops_unlicensed_control_notes
+            str(row[18]) if row[18] else None   # ops_committee_activity_notes
         ))
     
     # Create station reports relationships
