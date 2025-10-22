@@ -1,0 +1,63 @@
+station_id,name,region,country,latitude,longitude,country_norm,in_expected_bbox,region_mentions_burma,in_myanmar_bbox
+1,British India,North-Western Provinces and Oudh,British India,10.9630048,76.9550773,India,TRUE,FALSE,FALSE
+3,India (British Burma),British Burma Division,British Burma,NA,NA,Myanmar,NA,TRUE,NA
+8,Jhansi,North-Western Provinces & Oudh,British India,25.529855,78.6527802,India,TRUE,FALSE,FALSE
+17,Allahabad,North-Western Provinces & Oudh,British India,25.4381302,81.8338005,India,TRUE,FALSE,FALSE
+20,Prome,British Burma Division,British Burma,18.7742554,95.2600504,Myanmar,TRUE,TRUE,TRUE
+41,Cannanore,Madras Presidency,British India,11.8763836,75.3737973,India,TRUE,FALSE,FALSE
+42,Belgaum,Madras Presidency,British India,15.8572666,74.5069343,India,TRUE,FALSE,FALSE
+62,Jullundur,Punjab,British India,31.416667,75.616667,India,TRUE,FALSE,FALSE
+65,Roorkee,North-Western Provinces & Oudh,British India,29.8693496,77.8902124,India,TRUE,FALSE,FALSE
+83,Delhi,Punjab,British India,30.9587052,74.610057,India,TRUE,FALSE,FALSE
+91,Ferozepore,Punjab,British India,30.9911697,74.5518415,India,TRUE,FALSE,FALSE
+102,Seetabuldee,Madras Presidency,British India,NA,NA,India,NA,FALSE,NA
+104,Naini Tal,North-Western Provinces & Oudh,British India,29.3905295,79.460869,India,TRUE,FALSE,FALSE
+105,Bangalore,Madras Presidency,British India,13.0613607,80.1396767,India,TRUE,FALSE,FALSE
+106,Shahjahanpur,North-Western Provinces & Oudh,British India,27.9128583,79.7476254,India,TRUE,FALSE,FALSE
+109,Kamptee,Madras Presidency,British India,21.2170645,79.1964178,India,TRUE,FALSE,FALSE
+111,Meerut,North-Western Provinces & Oudh,British India,29.0018557,77.7679671,India,TRUE,FALSE,FALSE
+121,Bareilly,North-Western Provinces & Oudh,British India,28.4582344,79.4047452,India,TRUE,FALSE,FALSE
+122,Henzada,British Burma Division,British Burma,17.6457472,95.4609517,Myanmar,TRUE,TRUE,TRUE
+135,Tonghoo,British Burma Division,British Burma,NA,NA,Myanmar,NA,TRUE,NA
+137,Chakrata,North-Western Provinces & Oudh,British India,30.7013248,77.8703356,India,TRUE,FALSE,FALSE
+138,Fyzabad,North-Western Provinces & Oudh,British India,NA,NA,India,NA,FALSE,NA
+141,Muttra,North-Western Provinces & Oudh,British India,NA,NA,India,NA,FALSE,NA
+151,Fatehgarh,North-Western Provinces & Oudh,British India,27.3700748,79.620752,India,TRUE,FALSE,FALSE
+153,Nowshera,Punjab,British India,33.1575063,74.2403875,India,TRUE,FALSE,FALSE
+157,Cawnpore,North-Western Provinces & Oudh,British India,26.4609135,80.3217588,India,TRUE,FALSE,FALSE
+162,Jubbulpore,Central Provinces,British India,NA,NA,India,NA,FALSE,NA
+165,Rangoon,British Burma Division,British Burma,16.7967129,96.1609916,Myanmar,TRUE,TRUE,TRUE
+170,Thayetmyo,British Burma Division,British Burma,19.4158601,95.1419545,Myanmar,TRUE,TRUE,TRUE
+174,Madras,Madras Presidency (Civil),British India,13.0836939,80.270186,India,TRUE,FALSE,FALSE
+178,Mooltan,Punjab,British India,NA,NA,India,NA,FALSE,NA
+183,Benares,North-Western Provinces & Oudh,British India,25.3356491,83.0076292,India,TRUE,FALSE,FALSE
+189,Lucknow,North-Western Provinces & Oudh,British India,26.8381,80.9346001,India,TRUE,FALSE,FALSE
+190,Moradabad,North-Western Provinces & Oudh,British India,28.8796553,78.8095335,India,TRUE,FALSE,FALSE
+195,Dalhousie,Punjab,British India,32.2730553,75.6739784,India,TRUE,FALSE,FALSE
+201,St. Thomas' Mount,Madras Presidency,British India,12.9947654,80.1993715,India,TRUE,FALSE,FALSE
+204,Rawalpindi,Punjab,British India,31.2873363,75.792424,India,TRUE,FALSE,FALSE
+208,Umballa,Punjab,British India,NA,NA,India,NA,FALSE,NA
+210,Kasauli,Punjab,British India,30.4415701,76.8447303,India,TRUE,FALSE,FALSE
+223,St. Thomas’ Mount,Madras Presidency,British India,12.9947654,80.1993715,India,TRUE,FALSE,FALSE
+229,Attock,Punjab,British India,33.7695323,72.3610911,India,TRUE,FALSE,FALSE
+249,Subathu,Punjab,British India,30.9768704,76.9946534,India,TRUE,FALSE,FALSE
+257,Agra,North-Western Provinces & Oudh,British India,27.1752554,78.0098161,India,TRUE,FALSE,FALSE
+264,Naushahra,Punjab,British India,31.6853407,74.8985624,India,TRUE,FALSE,FALSE
+265,Secunderabad,Madras Presidency,British India,17.4337246,78.5006827,India,TRUE,FALSE,FALSE
+280,Bassein,British Burma Division,British Burma,16.783333,94.733333,Myanmar,TRUE,TRUE,TRUE
+300,Dagshai,Punjab,British India,30.8684273,77.0651484,India,TRUE,FALSE,FALSE
+313,Meean Meer,Punjab,British India,NA,NA,India,NA,FALSE,NA
+323,Moulmein,British Burma Division,British Burma,16.4908026,97.6284825,Myanmar,TRUE,TRUE,TRUE
+324,Trichinopoly,Madras Presidency,British India,10.8071144,78.6880939,India,TRUE,FALSE,FALSE
+335,Murree,Punjab,British India,33.9056829,73.392674,India,TRUE,FALSE,FALSE
+350,Toungoo,British Burma Division,British Burma,18.8094312,96.2363727,Myanmar,TRUE,TRUE,TRUE
+361,India (British Burma)+G143,British Burma Division,British Burma,NA,NA,Myanmar,NA,TRUE,NA
+362,Wellington,Madras Presidency,British India,11.3560782,76.7861039,India,TRUE,FALSE,FALSE
+367,Bellary,Madras Presidency,British India,15.1430224,76.9173277,India,TRUE,FALSE,FALSE
+375,Sitapur,North-Western Provinces & Oudh,British India,27.5026747,80.8335139,India,TRUE,FALSE,FALSE
+399,Akyab,British Burma Division,British Burma,20.139197,92.8970859,Myanmar,TRUE,TRUE,TRUE
+405,Sialkot,Punjab,British India,32.4935378,74.5411575,India,TRUE,FALSE,FALSE
+418,Ranikhet,North-Western Provinces & Oudh,British India,29.6323007,79.4154142,India,TRUE,FALSE,FALSE
+419,Sitabaldi,Central Provinces,British India,NA,NA,India,NA,FALSE,NA
+426,Peshawar,Punjab,British India,17.402817,78.4615197,India,TRUE,FALSE,FALSE
+429,Saugor,Central Provinces,British India,23.8083076,78.758254,India,TRUE,FALSE,FALSE
