@@ -83,3 +83,17 @@ print(f"Records with non-null act: {df['act'].notna().sum()}")
 
 # Close the connection
 conn.close()
+/Users/meghakhanna/medical_lock_hospitals/.venv/bin/python - <<'PY'
+import sqlite3
+conn=sqlite3.connect('medical_lock_hospitals.db')
+c=conn.cursor()
+c.execute("SELECT name FROM sqlite_master WHERE type='table'")
+print("tables:", [r[0] for r in c.fetchall()])
+c.execute("PRAGMA table_info(hospital_operations)")
+print("schema:", c.fetchall())
+c.execute("SELECT COUNT(*) FROM hospital_operations")
+print("count:", c.fetchone()[0])
+c.execute("SELECT * FROM hospital_operations LIMIT 5")
+print("sample:", c.fetchall())
+conn.close()
+PY
