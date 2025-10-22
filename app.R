@@ -1,3 +1,86 @@
+library(shiny)
+library(DBI)
+library(RSQLite)
+library(dplyr)
+library(DT)
+library(ggplot2)
+
+# Path to local DB (ensure this file is included when deploying)
+DB_PATH <- "medical_lock_hospitals.db"
+
+ui <- fluidPage(
+  titlePanel("Medical Lock Hospitals — Operations Explorer"),
+  sidebarLayout(
+    sidebarPanel(
+      helpText("Filter the hospital operations table. Data is read from the local SQLite DB."),
+      selectInput("year", "Year", choices = c("All"), selected = "All"),
+      selectInput("region", "Region", choices = c("All"), selected = "All"),
+      selectInput("inspection", "Inspection frequency", choices = c("All"), selected = "All"),
+      downloadButton("download_csv", "Download filtered CSV")
+    ),
+    mainPanel(
+      tabsetPanel(
+        tabPanel("Table", DTOutput("ops_table")),
+        tabPanel("Summary", plotOutput("summary_plot"))
+      )
+    )
+  )
+)
+
+server <- function(input, output, session) {
+  # Connect to DB and read the hospital_operations table into memory (small table)
+  con <- dbConnect(RSQLite::SQLite(), DB_PATH)
+  onStop(function() dbDisconnect(con))
+
+  data_all <- reactiveVal();
+
+  observe({
+    df <- dbReadTable(con, "hospital_operations")
+    # ensure consistent column types
+    if ("year" %in% names(df)) df$year <- as.integer(df$year)
+    data_all(df)
+
+    # populate filter choices once
+    updateSelectInput(session, "year", choices = c("All", sort(unique(na.omit(df$year)))) )
+    updateSelectInput(session, "region", choices = c("All", sort(unique(na.omit(df$region)))) )
+    updateSelectInput(session, "inspection", choices = c("All", sort(unique(na.omit(df$inspection_freq)))) )
+  })
+
+  filtered <- reactive({
+    df <- data_all()
+    if (is.null(df)) return(NULL)
+    if (!is.null(input$year) && input$year != "All") df <- filter(df, year == as.integer(input$year))
+    if (!is.null(input$region) && input$region != "All") df <- filter(df, region == input$region)
+    if (!is.null(input$inspection) && input$inspection != "All") df <- filter(df, inspection_freq == input$inspection)
+    df
+  })
+
+  output$ops_table <- renderDT({
+    df <- filtered()
+    if (is.null(df)) return(datatable(data.frame()))
+    datatable(df, options = list(pageLength = 25, scrollX = TRUE), rownames = FALSE)
+  })
+
+  output$summary_plot <- renderPlot({
+    df <- filtered()
+    if (is.null(df)) return(NULL)
+    ggplot(df %>% filter(!is.na(inspection_freq)), aes(x = inspection_freq)) +
+      geom_bar(fill = "steelblue") +
+      theme_minimal() +
+      labs(x = "Inspection frequency", y = "Count")
+  })
+
+  output$download_csv <- downloadHandler(
+    filename = function() paste0("hospital_operations_filtered_", Sys.Date(), ".csv"),
+    content = function(file) {
+      df <- filtered()
+      if (is.null(df)) df <- data.frame()
+      write.csv(df, file, row.names = FALSE)
+    }
+  )
+}
+
+shinyApp(ui, server)
 # Medical Lock Hospitals Data Explorer
 # Shiny App for data exploration and cleaning
 
