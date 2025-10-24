@@ -1,0 +1,60 @@
+"station_id","name","region","country","latitude","longitude","notes"
+1,"British India","North-Western Provinces and Oudh","British India",10.9630048,76.9550773,NA
+8,"Jhansi","North-Western Provinces & Oudh","British India",25.529855,78.6527802,NA
+17,"Allahabad","North-Western Provinces & Oudh","British India",25.4381302,81.8338005,NA
+20,"Prome","British Burma Division","British Burma",18.7742554,95.2600504,NA
+41,"Cannanore","Madras Presidency","British India",11.8763836,75.3737973,NA
+42,"Belgaum","Madras Presidency","British India",15.8572666,74.5069343,NA
+62,"Jullundur","Punjab","British India",31.416667,75.616667,NA
+65,"Roorkee","North-Western Provinces & Oudh","British India",29.8693496,77.8902124,NA
+83,"Delhi","Punjab","British India",30.9587052,74.610057,NA
+91,"Ferozepore","Punjab","British India",30.9911697,74.5518415,NA
+102,"Sitabaldi (Nagpur)","Madras Presidency","British India",21.143,79.0871,NA
+104,"Naini Tal","North-Western Provinces & Oudh","British India",29.3905295,79.460869,NA
+105,"Bangalore","Madras Presidency","British India",13.0613607,80.1396767,NA
+106,"Shahjahanpur","North-Western Provinces & Oudh","British India",27.9128583,79.7476254,NA
+109,"Kamptee","Madras Presidency","British India",21.2170645,79.1964178,NA
+111,"Meerut","North-Western Provinces & Oudh","British India",29.0018557,77.7679671,NA
+121,"Bareilly","North-Western Provinces & Oudh","British India",28.4582344,79.4047452,NA
+122,"Henzada","British Burma Division","British Burma",17.6457472,95.4609517,NA
+135,"Tonghoo","British Burma Division","British Burma",18.9398,96.4344,NA
+137,"Chakrata","North-Western Provinces & Oudh","British India",30.7013248,77.8703356,NA
+138,"Fyzabad","North-Western Provinces & Oudh","British India",26.773,82.1458,NA
+141,"Muttra","North-Western Provinces & Oudh","British India",27.4924,77.6737,NA
+151,"Fatehgarh","North-Western Provinces & Oudh","British India",27.3700748,79.620752,NA
+153,"Nowshera","Punjab","British India",33.1575063,74.2403875,NA
+157,"Cawnpore","North-Western Provinces & Oudh","British India",26.4609135,80.3217588,NA
+162,"Jubbulpore","Central Provinces","British India",23.1686,79.9339,NA
+165,"Rangoon","British Burma Division","British Burma",16.7967129,96.1609916,NA
+170,"Thayetmyo","British Burma Division","British Burma",19.4158601,95.1419545,NA
+174,"Madras","Madras Presidency (Civil)","British India",13.0836939,80.270186,NA
+178,"Mooltan","Punjab","British India",30.1979793,71.4724978,NA
+183,"Benares","North-Western Provinces & Oudh","British India",25.3356491,83.0076292,NA
+189,"Lucknow","North-Western Provinces & Oudh","British India",26.8381,80.9346001,NA
+190,"Moradabad","North-Western Provinces & Oudh","British India",28.8796553,78.8095335,NA
+195,"Dalhousie","Punjab","British India",32.2730553,75.6739784,NA
+201,"St. Thomas' Mount","Madras Presidency","British India",12.9947654,80.1993715,NA
+204,"Rawalpindi","Punjab","British India",31.2873363,75.792424,NA
+208,"Umballa","Punjab","British India",30.3752,76.7821,NA
+210,"Kasauli","Punjab","British India",30.4415701,76.8447303,NA
+223,"St. Thomas’ Mount","Madras Presidency","British India",12.9947654,80.1993715,NA
+229,"Attock","Punjab","British India",33.7695323,72.3610911,NA
+249,"Subathu","Punjab","British India",30.9768704,76.9946534,NA
+257,"Agra","North-Western Provinces & Oudh","British India",27.1752554,78.0098161,NA
+264,"Naushahra","Punjab","British India",31.6853407,74.8985624,NA
+265,"Secunderabad","Madras Presidency","British India",17.4337246,78.5006827,NA
+280,"Bassein","British Burma Division","British Burma",16.783333,94.733333,NA
+300,"Dagshai","Punjab","British India",30.8684273,77.0651484,NA
+313,"Meean Meer","Punjab","British India",31.5484,74.3602,NA
+323,"Moulmein","British Burma Division","British Burma",16.4908026,97.6284825,NA
+324,"Trichinopoly","Madras Presidency","British India",10.8071144,78.6880939,NA
+335,"Murree","Punjab","British India",33.9056829,73.392674,NA
+350,"Toungoo","British Burma Division","British Burma",18.8094312,96.2363727,NA
+362,"Wellington","Madras Presidency","British India",11.3560782,76.7861039,NA
+367,"Bellary","Madras Presidency","British India",15.1430224,76.9173277,NA
+375,"Sitapur","North-Western Provinces & Oudh","British India",27.5026747,80.8335139,NA
+399,"Akyab","British Burma Division","British Burma",20.139197,92.8970859,NA
+405,"Sialkot","Punjab","British India",32.4935378,74.5411575,NA
+418,"Ranikhet","North-Western Provinces & Oudh","British India",29.6323007,79.4154142,NA
+426,"Peshawar","Punjab","British India",17.402817,78.4615197,NA
+429,"Saugor","Central Provinces","British India",23.8083076,78.758254,NA

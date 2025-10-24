@@ -1,0 +1,1060 @@
+library(shiny)
+library(DBI)
+library(RSQLite)
+library(DT)
+library(plotly)
+library(dplyr)
+library(ggplot2)
+library(shinyWidgets)
+library(shinydashboard)
+library(leaflet)
+library(httr)
+
+# Simple null-coalescing helper
+`%||%` <- function(a, b) if (!is.null(a) && length(a) > 0) a else b
+
+# Silence dplyr NSE notes in linters/checks
+if (getRversion() >= "2.15.1") utils::globalVariables(c(
+  "act", "year", "women_added", "avg_registered", "region",
+  "fined_count", "imprisonment_count", "total_admissions", "station"
+))
+
+# Database connection function
+find_db_path <- function() {
+  fname <- "medical_lock_hospitals.db"
+  # Direct candidates
+  candidates <- c(
+    fname,
+    file.path(getwd(), fname),
+    file.path(dirname(getwd()), fname)
+  )
+  candidates <- unique(candidates)
+  exists_idx <- vapply(candidates, file.exists, logical(1))
+  if (any(exists_idx)) return(normalizePath(candidates[which(exists_idx)[1]], winslash = "/", mustWork = FALSE))
+  # Recursive search within current dir as fallback
+  hits <- tryCatch(list.files(getwd(), pattern = paste0("^", fname, "$"), recursive = TRUE, full.names = TRUE), error = function(e) character(0))
+  if (length(hits) > 0) return(normalizePath(hits[1], winslash = "/", mustWork = FALSE))
+  return(NA_character_)
+}
+
+connect_to_db <- function() {
+  db_path <- find_db_path()
+  if (is.na(db_path) || !file.exists(db_path)) {
+    stop(paste0("Database file not found. Working directory: ", getwd(), ". Place 'medical_lock_hospitals.db' here or run the app from the project root."))
+  }
+  dbConnect(RSQLite::SQLite(), db_path)
+}
+
+# UI
+ui <- dashboardPage(
+  dashboardHeader(title = "Medical Lock Hospitals Data Explorer"),
+  
+  dashboardSidebar(
+    sidebarMenu(
+      # Make Data Overview the first/default tab
+      menuItem("Data Overview", tabName = "data_overview", icon = icon("info-circle")),
+      menuItem("Medicalization", tabName = "medicalization", icon = icon("medkit")),
+      menuItem("Hospital Operations", tabName = "operations", icon = icon("hospital")),
+      menuItem("Data Tables", tabName = "tables", icon = icon("table")),
+      menuItem("Analysis", tabName = "analysis", icon = icon("chart-bar")),
+      menuItem("Visualizations", tabName = "visualizations", icon = icon("chart-line"))
+    )
+  ),
+  
+  dashboardBody(
+    tags$head(
+      tags$style(HTML("
+        .content-wrapper, .right-side {
+          background-color: #f4f4f4;
+        }
+        .box {
+          border-radius: 8px;
+          box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+        }
+      "))
+    ),
+    
+    tabItems(
+      # Hospital Operations Tab
+      tabItem(tabName = "operations",
+        fluidRow(
+          box(
+            title = "Hospital Operations Explorer", status = "primary", solidHeader = TRUE,
+            width = 12,
+            fluidRow(
+              column(3,
+                selectInput("year", "Year:", choices = c("All"), selected = "All")
+              ),
+              column(3,
+                selectInput("region", "Region:", choices = c("All"), selected = "All")
+              ),
+              column(3,
+                selectInput("country", "Country:", choices = c("All"), selected = "All")
+              ),
+              column(3,
+                selectInput("act", "Act:", choices = c("All"), selected = "All")
+              )
+            ),
+            br(),
+            DT::dataTableOutput("ops_table"),
+            br(),
+            downloadButton("download_csv", "Download Filtered Data")
+          )
+        ),
+        fluidRow(
+          box(
+            title = "Summary Statistics", status = "info", solidHeader = TRUE,
+            width = 12,
+            plotlyOutput("ops_summary")
+          )
+        )
+  ),
+  # Medicalization Tab
+      tabItem(tabName = "medicalization",
+        fluidRow(
+          valueBoxOutput("med_kpi_added", width = 3),
+          valueBoxOutput("med_kpi_registered", width = 3),
+          valueBoxOutput("med_kpi_fines", width = 3),
+          valueBoxOutput("med_kpi_imprison", width = 3)
+        ),
+        fluidRow(
+          valueBoxOutput("med_kpi_disease", width = 4),
+          valueBoxOutput("med_kpi_stations", width = 4),
+          valueBoxOutput("med_kpi_acts", width = 4)
+        ),
+        fluidRow(
+          box(title = "Women Added Over Time", status = "primary", solidHeader = TRUE, width = 6,
+              plotlyOutput("med_women_time", height = 320)
+          ),
+          box(title = "Acts Implementation Over Time", status = "info", solidHeader = TRUE, width = 6,
+              plotlyOutput("med_acts_time", height = 320)
+          )
+        ),
+        fluidRow(
+          box(title = "Women Added by Region", status = "success", solidHeader = TRUE, width = 6,
+              plotlyOutput("med_region_women", height = 360)
+          ),
+          box(title = "Punitive Actions Over Time", status = "warning", solidHeader = TRUE, width = 6,
+              plotlyOutput("med_punish_time", height = 360)
+          )
+        ),
+        fluidRow(
+          box(title = "Military-Medical Nexus (Scatter)", status = "danger", solidHeader = TRUE, width = 12,
+              plotlyOutput("med_corr_scatter", height = 360),
+              helpText("Relationship between military VD cases and women added to the system (same station-year).")
+          )
+        )
+      ),
+
+        # Data Overview Tab (landing page)
+        tabItem(tabName = "data_overview",
+          fluidRow(
+            box(title = "Project Overview", status = "primary", solidHeader = TRUE, width = 8,
+                p("Use this space to introduce your project: goals, historical context, and what the app enables."),
+                p("You can edit the content below. It saves to content/overview.md and renders on the left."),
+                tags$hr(),
+                # Editor controls
+                fluidRow(
+                  column(8,
+                         actionButton("overview_load", "Load from file", icon = icon("sync"), class = "btn btn-default"),
+                         actionButton("overview_save", "Save to file", icon = icon("save"), class = "btn btn-primary"),
+                         checkboxInput("overview_autosave", "Autosave every 3s", value = FALSE)
+                  )
+                ),
+                textAreaInput("overview_editor", label = NULL, value = "", width = "100%", height = "280px",
+                              placeholder = "Write Markdown here..."),
+                tags$small(em("Saves to content/overview.md"))
+            ),
+            box(title = "Overview (Rendered)", status = "info", solidHeader = TRUE, width = 4,
+                valueBoxOutput("ov_kpi_stations", width = 12),
+                valueBoxOutput("ov_kpi_women", width = 12),
+                valueBoxOutput("ov_kpi_troops", width = 12),
+                tags$hr(),
+        strong("STATIC TEST (if you see numbers below, data is fine):"),
+        tags$div(style="background:#f0f0f0; padding:10px; margin:10px 0;",
+          tags$strong("Hospital operations: "), "362 rows",
+          tags$br(),
+          tags$strong("Women admission: "), "306 rows",
+          tags$br(),
+          tags$strong("Troops: "), "301 rows"
+        ),
+        tags$hr(),
+        strong("Data status (live checks)"),
+        tableOutput("db_status_table"),
+    tags$hr(),
+    strong("Quick counts (reactive)"),
+    verbatimTextOutput("quick_counts"),
+        tags$hr(),
+                # Render external markdown file if present
+                uiOutput("overview_markdown")
+            )
+          ),
+          fluidRow(
+            box(title = "Figures & Images", status = "success", solidHeader = TRUE, width = 12,
+                p("Upload images here; they are saved into content/images/ and displayed below."),
+                fileInput("upload_images", "Upload images", multiple = TRUE,
+                          accept = c('image/png','image/jpeg','image/gif','image/svg+xml')),
+                uiOutput("overview_gallery")
+            )
+          )
+          ,
+          fluidRow(
+            box(title = "Live data samples (for troubleshooting)", status = "warning", solidHeader = TRUE, width = 12,
+                p("These show the first few rows directly from the database so you can confirm data is loading."),
+                tabsetPanel(
+                  tabPanel("hospital_operations", DT::dataTableOutput("sample_ops")),
+                  tabPanel("women_admission", DT::dataTableOutput("sample_women")),
+                  tabPanel("troops", DT::dataTableOutput("sample_troops"))
+                )
+            )
+          )
+          ,
+          fluidRow(
+            box(title = "Basic samples (no JavaScript)", status = "info", solidHeader = TRUE, width = 12,
+                p("If the tables above are blank, these plain HTML tables should still show."),
+                tabsetPanel(
+                  tabPanel("hospital_operations", tableOutput("sample_ops_basic")),
+                  tabPanel("women_admission", tableOutput("sample_women_basic")),
+                  tabPanel("troops", tableOutput("sample_troops_basic"))
+                )
+            )
+          )
+        ),
+      
+      # Data Tables Tab
+      tabItem(tabName = "tables",
+        fluidRow(
+          box(
+            title = "Database Tables", status = "success", solidHeader = TRUE,
+            width = 12,
+            selectInput("table_select", "Select Table:",
+              choices = c("hospital_operations", "hospital_notes", "documents", "stations", "station_reports", "troops", "women_admission"),
+              selected = "hospital_operations"
+            ),
+            conditionalPanel(
+              condition = "input.table_select == 'stations'",
+              div(
+                h4("Stations Data (Click cells to edit)"),
+                helpText("Click any cell in the Region or Country columns to edit."),
+                DTOutput("stations_editable")
+              )
+            ),
+            conditionalPanel(
+              condition = "input.table_select != 'stations'",
+              DT::dataTableOutput("data_table")
+            )
+          )
+        )
+      ),
+      
+      # Analysis Tab
+      tabItem(tabName = "analysis",
+        fluidRow(
+          box(
+            title = "Temporal Analysis", status = "info", solidHeader = TRUE,
+            width = 6,
+            plotlyOutput("temporal_plot")
+          ),
+          box(
+            title = "Geographic Distribution", status = "primary", solidHeader = TRUE,
+            width = 6,
+            plotlyOutput("geographic_plot")
+          )
+        ),
+        fluidRow(
+          box(
+            title = "Map Controls", status = "info", solidHeader = TRUE,
+            width = 12,
+            actionButton("geocode_missing_analysis", "Geocode missing stations", icon = icon("map-marker-alt")),
+            helpText("Click to geocode stations missing latitude/longitude using Nominatim (runs from the app host).")
+          )
+        ),
+        fluidRow(
+          box(
+            title = "Data Quality Overview", status = "success", solidHeader = TRUE,
+            width = 12,
+            DT::dataTableOutput("quality_summary")
+          )
+        )
+      )
+      ,
+      # Visualizations Tab
+      tabItem(tabName = "visualizations",
+        fluidRow(
+          box(
+            title = "Acts by Station", status = "primary", solidHeader = TRUE,
+            width = 6,
+            selectInput("viz_act", "Act:", choices = c("All"), selected = "All"),
+            selectInput("viz_region", "Region:", choices = c("All"), selected = "All"),
+            plotlyOutput("acts_by_station")
+          ),
+          box(
+            title = "Stations Map", status = "info", solidHeader = TRUE,
+            width = 6,
+            actionButton("geocode_missing_map", "Geocode missing stations", icon = icon("map-marker-alt")),
+            helpText("Markers show stations. Click a marker for acts and counts."),
+            leafletOutput("stations_map", height = 550)
+          )
+        ),
+        fluidRow(
+          box(
+            title = "Acts Table", status = "success", solidHeader = TRUE,
+            width = 12,
+            DT::dataTableOutput("acts_table")
+          )
+        )
+      )
+    )
+  )
+)
+
+# Server
+server <- function(input, output, session) {
+  # Serve content/ directory as static for images
+  try({
+    shiny::addResourcePath('content', file.path(getwd(), 'content'))
+  }, silent = TRUE)
+  # Database connection
+  conn <- reactive({
+    connect_to_db()
+  })
+
+  # Log DB diagnostics once per session to the R console to aid debugging
+  observeEvent(TRUE, {
+    db_path <- tryCatch(find_db_path(), error = function(e) NA_character_)
+    msg <- sprintf("[App Init] wd=%s | db=%s | exists=%s", getwd(), as.character(db_path), file.exists(db_path))
+    message(msg)
+    safe_n <- function(sql){
+      tryCatch({ dbGetQuery(conn(), sql)$n[1] }, error = function(e) NA)
+    }
+    message(sprintf("[App Init] hospital_operations=%s | women_admission=%s | troops=%s",
+                    as.character(safe_n('SELECT COUNT(*) AS n FROM hospital_operations')),
+                    as.character(safe_n('SELECT COUNT(*) AS n FROM women_admission')),
+                    as.character(safe_n('SELECT COUNT(*) AS n FROM troops'))))
+  }, once = TRUE)
+  
+  # Close connection when app stops
+  onStop(function() {
+    if (exists("conn")) {
+      dbDisconnect(conn())
+    }
+  })
+  
+  # Reactive value for hospital operations data
+  ops_data <- reactive({
+    data <- dbGetQuery(conn(), "SELECT * FROM hospital_operations")
+    if ("year" %in% names(data)) data$year <- as.integer(data$year)
+    return(data)
+  })
+
+  # Reactive value for women admissions
+  women_data <- reactive({
+    data <- dbGetQuery(conn(), "SELECT * FROM women_admission")
+    if ("year" %in% names(data)) data$year <- suppressWarnings(as.integer(data$year))
+    # Coerce common numeric columns to numeric to avoid rendering errors
+    num_cols <- c(
+      "women_start_register","women_added","women_removed","women_end_register",
+      "avg_registered","non_attendance_cases","fined_count","imprisonment_count",
+      "disease_primary_syphilis","disease_secondary_syphilis","disease_gonorrhoea",
+      "disease_leucorrhoea","discharges","deaths","Total"
+    )
+    for (cn in intersect(num_cols, names(data))) {
+      data[[cn]] <- suppressWarnings(as.numeric(data[[cn]]))
+    }
+    data
+  })
+
+  # Reactive value for troops
+  troops_data <- reactive({
+    data <- dbGetQuery(conn(), "SELECT * FROM troops")
+    if ("year" %in% names(data)) data$year <- suppressWarnings(as.integer(data$year))
+    if ("total_admissions" %in% names(data)) data$total_admissions <- suppressWarnings(as.numeric(data$total_admissions))
+    data
+  })
+
+  # Ensure content directories exist
+  dir.create(file.path(getwd(), 'content'), showWarnings = FALSE)
+  dir.create(file.path(getwd(), 'content', 'images'), showWarnings = FALSE)
+
+  # ======================
+  # Data Overview content
+  # ======================
+  md_path <- file.path(getwd(), 'content', 'overview.md')
+  overview_version <- reactiveVal(0)
+  images_version <- reactiveVal(0)
+  last_saved_content <- reactiveVal("")
+
+  # Initialize editor from file on load
+  observe({
+    if (file.exists(md_path)) {
+      txt <- tryCatch(paste(readLines(md_path, warn = FALSE), collapse = "\n"), error = function(e) "")
+      last_saved_content(txt)
+      updateTextAreaInput(session, "overview_editor", value = txt)
+      overview_version(overview_version() + 1)
+    }
+  })
+
+  # Load button
+  observeEvent(input$overview_load, {
+    if (file.exists(md_path)) {
+      txt <- tryCatch(paste(readLines(md_path, warn = FALSE), collapse = "\n"), error = function(e) "")
+      last_saved_content(txt)
+      updateTextAreaInput(session, "overview_editor", value = txt)
+      showNotification("Overview content loaded from file.", type = "message")
+      overview_version(overview_version() + 1)
+    } else {
+      showNotification("No overview.md found yet. Start writing and click Save.", type = "warning")
+    }
+  })
+
+  # Save function
+  save_overview <- function(text) {
+    dir.create(dirname(md_path), showWarnings = FALSE, recursive = TRUE)
+    con <- file(md_path, open = "w", encoding = "UTF-8")
+    on.exit(close(con), add = TRUE)
+    writeLines(text %||% "", con, useBytes = TRUE)
+    last_saved_content(text %||% "")
+    overview_version(overview_version() + 1)
+  }
+
+  # Save button
+  observeEvent(input$overview_save, {
+    save_overview(input$overview_editor)
+    showNotification("Overview saved.", type = "message")
+  })
+
+  # Autosave loop every 3s if enabled and content changed
+  autosave_timer <- reactiveTimer(3000)
+  observe({
+    autosave_timer()
+    if (isTRUE(input$overview_autosave)) {
+      cur <- input$overview_editor
+      if (!identical(cur, last_saved_content())) {
+        save_overview(cur)
+        showNotification("Autosaved overview.", type = "message", duration = 1)
+      }
+    }
+  })
+  output$overview_markdown <- renderUI({
+    # depend on version so we re-render when file changes
+    ovv <- overview_version()
+    md_path <- file.path(getwd(), 'content', 'overview.md')
+    if (!file.exists(md_path)) {
+      return(div(em("Create content/overview.md to populate this section.")))
+    }
+    # If markdown package is missing, show instructions and raw preview
+    if (!requireNamespace("markdown", quietly = TRUE)) {
+      txt <- tryCatch(paste(readLines(md_path, warn = FALSE), collapse = "\n"), error = function(e) "")
+      return(tagList(
+        div(style="margin-bottom: 8px;", strong("Markdown package not installed.")),
+        p("Install it to render formatted content:"),
+        tags$pre("install.packages('markdown')"),
+        tags$hr(),
+        div(strong("Raw preview:")),
+        tags$pre(style='white-space: pre-wrap; background:#fafafa; padding:8px; border:1px solid #eee; border-radius:6px;', txt)
+      ))
+    }
+    includeMarkdown(md_path)
+  })
+
+  output$overview_gallery <- renderUI({
+    imgv <- images_version()
+    img_dir <- file.path(getwd(), 'content', 'images')
+    if (!dir.exists(img_dir)) return(div(em("Add images to content/images/ to see them here.")))
+    files <- list.files(img_dir, pattern = '\\.(png|jpg|jpeg|gif|svg)$', ignore.case = TRUE, full.names = TRUE)
+    if (length(files) == 0) return(div(em("No images found in content/images/")))
+    # Render images in a responsive grid
+    tags$div(style = 'display:flex; flex-wrap:wrap; gap:16px;',
+      lapply(files, function(f) {
+        tags$div(style = 'flex: 1 1 300px; border:1px solid #eee; padding:8px; background:#fff; border-radius:6px;',
+          tags$img(src = file.path('content', 'images', basename(f)), style = 'max-width:100%; height:auto; display:block;'),
+          tags$small(basename(f))
+        )
+      })
+    )
+  })
+
+  # Handle image uploads
+  observeEvent(input$upload_images, {
+    files <- input$upload_images
+    if (is.null(files)) return()
+    dest_dir <- file.path(getwd(), 'content', 'images')
+    dir.create(dest_dir, showWarnings = FALSE, recursive = TRUE)
+    for (i in seq_len(nrow(files))) {
+      src <- files$datapath[i]
+      name <- files$name[i]
+      # If file exists, append timestamp
+      dest <- file.path(dest_dir, name)
+      if (file.exists(dest)) {
+        base <- tools::file_path_sans_ext(name)
+        ext <- tools::file_ext(name)
+        ts <- format(Sys.time(), "%Y%m%d_%H%M%S")
+        dest <- file.path(dest_dir, paste0(base, "_", ts, if (nzchar(ext)) paste0(".", ext) else ""))
+      }
+      ok <- tryCatch(file.copy(src, dest, overwrite = FALSE), error = function(e) FALSE)
+      if (isTRUE(ok)) {
+        images_version(images_version() + 1)
+      }
+    }
+    showNotification("Images uploaded.", type = "message")
+  })
+
+  # KPIs on overview
+  output$ov_kpi_stations <- renderValueBox({
+    n <- dbGetQuery(conn(), "SELECT COUNT(*) AS n FROM stations")$n[1]
+    valueBox(format(n, big.mark = ","), "Stations", icon = icon("map-marker"), color = "teal")
+  })
+  output$ov_kpi_women <- renderValueBox({
+    d <- women_data()
+    val <- suppressWarnings(sum(d$women_added, na.rm = TRUE))
+    valueBox(format(val, big.mark = ","), "Women Added", icon = icon("users"), color = "purple")
+  })
+  output$ov_kpi_troops <- renderValueBox({
+    d <- troops_data()
+    val <- suppressWarnings(sum(d$total_admissions, na.rm = TRUE))
+    valueBox(format(val, big.mark = ","), "Troop VD Admissions", icon = icon("shield"), color = "olive")
+  })
+  
+  # Update filter choices
+  observe({
+    data <- ops_data()
+    updateSelectInput(session, "year", 
+      choices = c("All", sort(unique(na.omit(data$year)))),
+      selected = "All"
+    )
+    updateSelectInput(session, "region", 
+      choices = c("All", sort(unique(na.omit(data$region)))),
+      selected = "All"
+    )
+    updateSelectInput(session, "country", 
+      choices = c("All", sort(unique(na.omit(data$country)))),
+      selected = "All"
+    )
+    updateSelectInput(session, "act", 
+      choices = c("All", sort(unique(na.omit(data$act)))),
+      selected = "All"
+    )
+  })
+  
+  # Filter data based on inputs
+  filtered_data <- reactive({
+    data <- ops_data()
+    
+    if (input$year != "All") {
+      data <- data[data$year == as.integer(input$year), ]
+    }
+    if (input$region != "All") {
+      data <- data[data$region == input$region, ]
+    }
+    if (input$country != "All") {
+      data <- data[data$country == input$country, ]
+    }
+    if (input$act != "All") {
+      data <- data[data$act == input$act, ]
+    }
+    
+    return(data)
+  })
+  
+  # Operations table output
+  output$ops_table <- DT::renderDataTable({
+    DT::datatable(
+      filtered_data(),
+      options = list(
+        pageLength = 25,
+        scrollX = TRUE,
+        dom = 'Bfrtip',
+        buttons = c('copy', 'csv', 'excel')
+      ),
+      extensions = 'Buttons'
+    )
+  })
+  
+  # Download handler
+  output$download_csv <- downloadHandler(
+    filename = function() {
+      paste0("hospital_operations_", Sys.Date(), ".csv")
+    },
+    content = function(file) {
+      write.csv(filtered_data(), file, row.names = FALSE)
+    }
+  )
+  
+  # Operations summary plot
+  output$ops_summary <- renderPlotly({
+    data <- filtered_data()
+  shiny::validate(shiny::need(nrow(data) > 0, "No operations match the current filters."))
+    p <- plot_ly(data, x = ~year) %>%
+      add_trace(type = "histogram", name = "Operations per Year") %>%
+      layout(
+        title = "Distribution of Operations by Year",
+        xaxis = list(title = "Year"),
+        yaxis = list(title = "Count")
+      )
+    p
+  })
+
+  # Proxies for DT tables to push refreshed data after edits
+  data_table_proxy <- dataTableProxy("data_table")
+  stations_proxy <- dataTableProxy("stations_editable")
+
+  # ======================
+  # Medicalization KPIs
+  # ======================
+  output$med_kpi_added <- renderValueBox({
+    d <- women_data()
+    val <- suppressWarnings(sum(d$women_added, na.rm = TRUE))
+    valueBox(format(val, big.mark = ","), "Women Added to Register", icon = icon("users"), color = "purple")
+  })
+
+  output$med_kpi_registered <- renderValueBox({
+    d <- women_data()
+    val <- suppressWarnings(sum(d$avg_registered, na.rm = TRUE))
+    valueBox(format(val, big.mark = ","), "Total Registered (sum)", icon = icon("list-alt"), color = "aqua")
+  })
+
+  output$med_kpi_fines <- renderValueBox({
+    d <- women_data()
+    val <- suppressWarnings(sum(d$fined_count, na.rm = TRUE))
+    valueBox(format(val, big.mark = ","), "Fines Imposed", icon = icon("gavel"), color = "yellow")
+  })
+
+  output$med_kpi_imprison <- renderValueBox({
+    d <- women_data()
+    val <- suppressWarnings(sum(d$imprisonment_count, na.rm = TRUE))
+    valueBox(format(val, big.mark = ","), "Imprisonments", icon = icon("lock"), color = "red")
+  })
+
+  output$med_kpi_disease <- renderValueBox({
+    d <- women_data()
+    # Sum over disease columns that exist
+    cols <- intersect(colnames(d), c("disease_primary_syphilis","disease_secondary_syphilis","disease_gonorrhoea","disease_leucorrhoea"))
+    total <- 0
+    if (length(cols) > 0) total <- suppressWarnings(sum(rowSums(d[cols], na.rm = TRUE), na.rm = TRUE))
+    valueBox(format(total, big.mark = ","), "Total Disease Cases (Women)", icon = icon("stethoscope"), color = "green")
+  })
+
+  output$med_kpi_stations <- renderValueBox({
+    n <- dbGetQuery(conn(), "SELECT COUNT(*) AS n FROM stations")$n[1]
+    valueBox(format(n, big.mark = ","), "Lock Hospital Stations", icon = icon("map-marker"), color = "teal")
+  })
+
+  output$med_kpi_acts <- renderValueBox({
+    d <- ops_data()
+    nActs <- d %>% filter(!is.na(act) & act != 'None') %>% summarise(n = dplyr::n_distinct(act)) %>% pull(n)
+    valueBox(nActs, "Distinct Acts/Regimes Used", icon = icon("balance-scale"), color = "olive")
+  })
+
+  # ======================
+  # Medicalization Plots
+  # ======================
+  output$med_women_time <- renderPlotly({
+    d <- women_data() %>%
+      group_by(year) %>%
+      summarise(women_added = sum(women_added, na.rm = TRUE),
+                avg_registered = sum(avg_registered, na.rm = TRUE)) %>%
+      arrange(year) %>% filter(!is.na(year))
+  shiny::validate(shiny::need(nrow(d) > 0, "No women_admission data found to plot by year."))
+    plot_ly(d, x = ~year) %>%
+      add_lines(y = ~women_added, name = 'Women Added', line = list(color = '#e74c3c')) %>%
+      add_lines(y = ~avg_registered, name = 'Total Registered (sum)', line = list(color = '#3498db')) %>%
+      layout(title = 'Women Added and Registered Over Time', xaxis = list(title = 'Year'), yaxis = list(title = 'Count'))
+  })
+
+  output$med_acts_time <- renderPlotly({
+    d <- ops_data() %>% filter(!is.na(act) & act != 'None') %>%
+      group_by(year, act) %>% summarise(n = dplyr::n(), .groups = 'drop') %>% arrange(year)
+  shiny::validate(shiny::need(nrow(d) > 0, "No acts available to plot over time."))
+    plot_ly(d, x = ~year, y = ~n, color = ~act, type = 'scatter', mode = 'lines+markers') %>%
+      layout(title = 'Acts Implementation Over Time', xaxis = list(title = 'Year'), yaxis = list(title = 'Count'))
+  })
+
+  output$med_region_women <- renderPlotly({
+    d <- women_data() %>% group_by(region) %>% summarise(women_added = sum(women_added, na.rm = TRUE), .groups = 'drop') %>%
+      arrange(desc(women_added)) %>% head(20)
+  shiny::validate(shiny::need(nrow(d) > 0, "No women data aggregated by region."))
+    plot_ly(d, x = ~reorder(region, women_added), y = ~women_added, type = 'bar') %>%
+      layout(title = 'Women Added by Region (Top 20)', xaxis = list(title = 'Region', tickangle = 45), yaxis = list(title = 'Count'))
+  })
+
+  output$med_punish_time <- renderPlotly({
+    d <- women_data() %>% group_by(year) %>% summarise(
+      fines = sum(fined_count, na.rm = TRUE),
+      imprison = sum(imprisonment_count, na.rm = TRUE),
+      non_attend = sum(non_attendance_cases, na.rm = TRUE), .groups = 'drop') %>% filter(!is.na(year))
+  shiny::validate(shiny::need(nrow(d) > 0, "No punitive action data by year."))
+    plot_ly(d, x = ~year) %>%
+      add_lines(y = ~fines, name = 'Fines', line = list(color = '#f39c12')) %>%
+      add_lines(y = ~imprison, name = 'Imprisonments', line = list(color = '#c0392b')) %>%
+      add_lines(y = ~non_attend, name = 'Non-Attendance', line = list(color = '#16a085')) %>%
+      layout(title = 'Punitive Actions Over Time', xaxis = list(title = 'Year'), yaxis = list(title = 'Count'))
+  })
+
+  output$med_corr_scatter <- renderPlotly({
+    tw <- troops_data() %>%
+      filter(!is.na(year)) %>%
+      group_by(station, year) %>%
+      summarise(troop_disease = sum(total_admissions, na.rm = TRUE), .groups = 'drop') %>%
+      dplyr::filter(!is.na(station)) %>%
+      dplyr::distinct(station, year, .keep_all = TRUE)
+    wd <- women_data() %>%
+      filter(!is.na(year)) %>%
+      group_by(station, year) %>%
+      summarise(women_added = sum(women_added, na.rm = TRUE), .groups = 'drop') %>%
+      dplyr::filter(!is.na(station)) %>%
+      dplyr::distinct(station, year, .keep_all = TRUE)
+    d <- tw %>% inner_join(wd, by = c('station','year'), relationship = 'one-to-one') %>%
+      filter(!is.na(troop_disease) & !is.na(women_added))
+  shiny::validate(shiny::need(nrow(d) > 0, "No overlapping station-year records between troops and women tables."))
+    plot_ly(d, x = ~troop_disease, y = ~women_added, type = 'scatter', mode = 'markers', marker = list(size = 9, color = '#9b59b6')) %>%
+      layout(title = 'Military VD vs Women Added (Station-Year)', xaxis = list(title = 'Military VD Admissions'), yaxis = list(title = 'Women Added'))
+  })
+  
+  # Data tables view
+  output$data_table <- DT::renderDataTable({
+    table_name <- input$table_select
+    data <- dbGetQuery(conn(), paste("SELECT * FROM", table_name))
+    # For stations table, rename 'name' to 'station_name' for display
+    if (table_name == "stations" && "name" %in% names(data)) {
+      names(data)[names(data) == "name"] <- "station_name"
+    }
+    DT::datatable(
+      data,
+      editable = TRUE,
+      options = list(
+        pageLength = 25,
+        scrollX = TRUE,
+        dom = 'Bfrtip',
+        buttons = c('copy', 'csv', 'excel')
+      ),
+      extensions = 'Buttons'
+    )
+  })
+
+  # Handle table edits
+  observeEvent(input$data_table_cell_edit, {
+    info <- input$data_table_cell_edit
+    i <- info$row
+    j <- info$col + 1  # Column index is 0-based in the callback
+    v <- info$value
+    
+    # Get current table name and data
+    table_name <- input$table_select
+    data <- dbGetQuery(conn(), paste("SELECT * FROM", table_name))
+    col_names <- names(data)
+    
+    if (j >= 1 && j <= length(col_names)) {
+      colname <- col_names[j]
+      id_col <- names(data)[1]  # Assume first column is the ID column
+      # Map displayed row index to actual data index considering sorting/filtering
+      current_rows <- input$data_table_rows_current
+      row_index <- if (!is.null(current_rows) && length(current_rows) >= i) current_rows[i] else i
+      row_id <- data[[id_col]][row_index]
+      
+      # Execute update
+      query <- sprintf("UPDATE %s SET %s = ? WHERE %s = ?", table_name, colname, id_col)
+      dbExecute(conn(), query, params = list(v, row_id))
+      
+      # Show notification
+      showNotification(
+        sprintf("Updated %s to '%s' for row ID %s in table %s", colname, v, row_id, table_name),
+        type = "message"
+      )
+
+      # Refresh displayed data to keep UI in sync with DB
+      new_data <- dbGetQuery(conn(), paste("SELECT * FROM", table_name))
+      replaceData(data_table_proxy, new_data, resetPaging = FALSE, rownames = FALSE)
+    }
+  })
+
+  # Editable stations table for region/country/coordinates
+  output$stations_editable <- DT::renderDT({
+    data <- dbGetQuery(conn(), "SELECT station_id, name AS station_name, region, country, latitude, longitude FROM stations")
+    datatable(
+      data,
+      editable = list(target = "cell", columns = c(3, 4, 5, 6)), # region (3), country (4), latitude (5), longitude (6)
+      options = list(pageLength = 25, scrollX = TRUE)
+    )
+  })
+
+  # Save edits to stations table
+  observeEvent(input$stations_editable_cell_edit, {
+    info <- input$stations_editable_cell_edit
+    i <- info$row
+    j <- info$col
+    v <- info$value
+    # Allow edits to region (3), country (4), latitude (5), longitude (6)
+    if (j %in% c(3, 4, 5, 6)) {
+      data <- dbGetQuery(conn(), "SELECT station_id, name AS station_name, region, country, latitude, longitude FROM stations")
+      # Map displayed row index to actual data index considering sorting/filtering
+      current_rows <- input$stations_editable_rows_current
+      row_index <- if (!is.null(current_rows) && length(current_rows) >= i) current_rows[i] else i
+      station_id <- data$station_id[row_index]
+      colname <- switch(as.character(j), `3` = "region", `4` = "country", `5` = "latitude", `6` = "longitude")
+      # Validate numeric for lat/lon
+      if (colname %in% c("latitude", "longitude")) {
+        num <- suppressWarnings(as.numeric(v))
+        if (is.na(num)) {
+          showNotification(sprintf("Invalid value '%s' for %s; please enter a number.", v, colname), type = "error")
+          return()
+        }
+        # Optional bounds check
+        if (colname == "latitude" && (num < -90 || num > 90)) {
+          showNotification("Latitude must be between -90 and 90.", type = "error")
+          return()
+        }
+        if (colname == "longitude" && (num < -180 || num > 180)) {
+          showNotification("Longitude must be between -180 and 180.", type = "error")
+          return()
+        }
+        v <- num
+      }
+      dbExecute(conn(), paste0("UPDATE stations SET ", colname, " = ? WHERE station_id = ?"), params = list(v, station_id))
+      showNotification(paste("Updated", colname, "for station_id", station_id), type = "message")
+
+      # Refresh displayed stations table
+      new_st <- dbGetQuery(conn(), "SELECT station_id, name AS station_name, region, country, latitude, longitude FROM stations")
+      replaceData(stations_proxy, new_st, resetPaging = FALSE, rownames = FALSE)
+    }
+  })
+  
+  # Temporal analysis plot
+  output$temporal_plot <- renderPlotly({
+    data <- ops_data()
+    yearly_counts <- data %>%
+      group_by(year) %>%
+      summarise(count = n(), .groups = 'drop') %>%
+      arrange(year)
+    
+    plot_ly(yearly_counts, x = ~year, y = ~count, type = "scatter", mode = "lines+markers") %>%
+      layout(
+        title = "Operations Over Time",
+        xaxis = list(title = "Year"),
+        yaxis = list(title = "Number of Operations")
+      )
+  })
+  
+  # Geographic distribution plot
+  output$geographic_plot <- renderPlotly({
+    data <- ops_data()
+    region_counts <- data %>%
+      group_by(region) %>%
+      summarise(count = n(), .groups = 'drop') %>%
+      arrange(desc(count))
+    
+    plot_ly(region_counts, x = ~reorder(region, count), y = ~count, type = "bar") %>%
+      layout(
+        title = "Operations by Region",
+        xaxis = list(title = "Region", tickangle = 45),
+        yaxis = list(title = "Number of Operations")
+      )
+  })
+  
+  # Data quality summary
+  output$quality_summary <- DT::renderDataTable({
+    data <- ops_data()
+    quality_df <- data.frame(
+      Column = names(data),
+      Total_Records = nrow(data),
+      Missing_Values = sapply(data, function(x) sum(is.na(x))),
+      Complete_Values = sapply(data, function(x) sum(!is.na(x))),
+      Completeness_Pct = sapply(data, function(x) round(sum(!is.na(x))/length(x)*100, 2))
+    )
+    
+    DT::datatable(
+      quality_df,
+      options = list(
+        pageLength = 10,
+        dom = 't'
+      )
+    )
+  })
+
+  # Populate Viz selectors
+  observe({
+    data <- ops_data()
+    acts <- sort(unique(na.omit(data$act)))
+    regions <- sort(unique(na.omit(data$region)))
+    updateSelectInput(session, "viz_act", choices = c("All", acts), selected = "All")
+    updateSelectInput(session, "viz_region", choices = c("All", regions), selected = "All")
+  })
+
+  # Acts by station plot
+  output$acts_by_station <- renderPlotly({
+    data <- ops_data()
+    df <- data
+    if (!is.null(input$viz_act) && input$viz_act != "All") df <- df[df$act == input$viz_act, ]
+    if (!is.null(input$viz_region) && input$viz_region != "All") df <- df[df$region == input$viz_region, ]
+  acts_station <- df %>% group_by(station) %>% summarise(count = n(), .groups = 'drop') %>% arrange(desc(count)) %>% head(50)
+  shiny::validate(shiny::need(nrow(acts_station) > 0, "No acts for the selected filters."))
+    plot_ly(acts_station, x = ~reorder(station, count), y = ~count, type = 'bar') %>%
+      layout(title = paste('Acts by Station', ifelse(input$viz_act == 'All', '', paste('-', input$viz_act))), xaxis = list(title = 'Station', tickangle = 45), yaxis = list(title = 'Count'))
+  })
+
+  # Acts table
+  output$acts_table <- DT::renderDataTable({
+    data <- ops_data()
+    df <- data
+    if (!is.null(input$viz_act) && input$viz_act != "All") df <- df[df$act == input$viz_act, ]
+    if (!is.null(input$viz_region) && input$viz_region != "All") df <- df[df$region == input$viz_region, ]
+    df %>% select(hid, station, region, country, year, act)
+  }, options = list(pageLength = 25, scrollX = TRUE))
+
+  # Stations map (clustered)
+  output$stations_map <- renderLeaflet({
+    ops <- ops_data()
+    sts <- dbGetQuery(conn(), "SELECT station_id, name, region, country, latitude, longitude FROM stations")
+  ops_counts <- ops %>% group_by(station) %>% summarise(count = n(), .groups = 'drop')
+    map_df <- sts %>% left_join(ops_counts, by = c('name' = 'station'))
+    m <- leaflet(map_df) %>% addProviderTiles(providers$CartoDB.Positron)
+    coords <- map_df %>% filter(!is.na(latitude) & !is.na(longitude) & latitude != '' & longitude != '')
+    if (nrow(coords) > 0) {
+      # compute acts per station for popup
+  acts_by_station <- ops %>% group_by(station, act) %>% summarise(n = n(), .groups = 'drop') %>% arrange(station, desc(n))
+      popup_info <- sapply(seq_len(nrow(coords)), function(i) {
+        row <- coords[i, ]
+        st_name <- row$name
+        count <- ifelse(is.na(row$count), 0, row$count)
+        acts_rows <- acts_by_station %>% filter(station == st_name)
+        acts_html <- ''
+        if (nrow(acts_rows) > 0) {
+          items <- paste0('<li>', acts_rows$act, ' (', acts_rows$n, ')</li>', collapse = '')
+          acts_html <- paste0('<ul>', items, '</ul>')
+        } else {
+          acts_html <- '<i>No acts recorded</i>'
+        }
+        paste0('<b>', st_name, '</b><br/>Region: ', row$region, '<br/>Operations: ', count, '<br/>Acts:', acts_html)
+      })
+
+      m <- m %>% addCircleMarkers(lng = coords$longitude, lat = coords$latitude,
+                                  radius = ~ifelse(is.na(coords$count), 4, 4 + log1p(coords$count)),
+                                  label = ~paste0(name, ' (', region, ')'),
+                                  popup = popup_info,
+                                  clusterOptions = markerClusterOptions())
+    }
+    m
+  })
+
+  # Simple DB status table for the Overview page
+  output$db_status_table <- renderTable({
+    # Force evaluation by referencing a reactive
+    req(conn())
+    out <- list()
+    db_path <- tryCatch(find_db_path(), error=function(e) NA_character_)
+    out[[length(out)+1]] <- c(Item='Working directory', Value=getwd())
+    out[[length(out)+1]] <- c(Item='Resolved DB path', Value=as.character(db_path))
+    out[[length(out)+1]] <- c(Item='DB path exists', Value=as.character(!is.na(db_path) && file.exists(db_path)))
+    safe_n <- function(sql){
+      val <- tryCatch(dbGetQuery(conn(), sql)$n[1], error=function(e) NA)
+      as.character(val)
+    }
+    out[[length(out)+1]] <- c(Item='hospital_operations rows', Value=safe_n('SELECT COUNT(*) AS n FROM hospital_operations'))
+    out[[length(out)+1]] <- c(Item='women_admission rows', Value=safe_n('SELECT COUNT(*) AS n FROM women_admission'))
+    out[[length(out)+1]] <- c(Item='troops rows', Value=safe_n('SELECT COUNT(*) AS n FROM troops'))
+    as.data.frame(do.call(rbind, out), stringsAsFactors = FALSE)
+  }, striped = TRUE, hover = TRUE, spacing = 's', bordered = TRUE)
+
+  # Plain text quick counts to verify reactivity without JS dependencies
+  output$quick_counts <- renderPrint({
+    req(conn())
+    od <- tryCatch(ops_data(), error = function(e) NULL)
+    wd <- tryCatch(women_data(), error = function(e) NULL)
+    td <- tryCatch(troops_data(), error = function(e) NULL)
+    list(
+      hospital_operations_rows = if (!is.null(od)) nrow(od) else NA_integer_,
+      women_admission_rows = if (!is.null(wd)) nrow(wd) else NA_integer_,
+      troops_rows = if (!is.null(td)) nrow(td) else NA_integer_,
+      years_women = if (!is.null(wd) && "year" %in% names(wd)) sort(unique(stats::na.omit(wd$year)))[1:min(5, length(unique(stats::na.omit(wd$year))))] else NA
+    )
+  })
+
+  # Live data samples for troubleshooting
+  output$sample_ops <- DT::renderDataTable({
+    req(conn())
+    df <- tryCatch(dbGetQuery(conn(), 'SELECT * FROM hospital_operations LIMIT 10'), error = function(e) NULL)
+    shiny::validate(shiny::need(!is.null(df) && nrow(df) > 0, 'No rows found in hospital_operations.'))
+    DT::datatable(df, options = list(pageLength = 10, dom = 't', scrollX = TRUE))
+  })
+  output$sample_women <- DT::renderDataTable({
+    req(conn())
+    df <- tryCatch(dbGetQuery(conn(), 'SELECT * FROM women_admission LIMIT 10'), error = function(e) NULL)
+    shiny::validate(shiny::need(!is.null(df) && nrow(df) > 0, 'No rows found in women_admission.'))
+    DT::datatable(df, options = list(pageLength = 10, dom = 't', scrollX = TRUE))
+  })
+  output$sample_troops <- DT::renderDataTable({
+    req(conn())
+    df <- tryCatch(dbGetQuery(conn(), 'SELECT * FROM troops LIMIT 10'), error = function(e) NULL)
+    shiny::validate(shiny::need(!is.null(df) && nrow(df) > 0, 'No rows found in troops.'))
+    DT::datatable(df, options = list(pageLength = 10, dom = 't', scrollX = TRUE))
+  })
+
+  # Basic HTML fallbacks (no JS)
+  output$sample_ops_basic <- renderTable({
+    req(conn())
+    df <- tryCatch(dbGetQuery(conn(), 'SELECT * FROM hospital_operations LIMIT 10'), error = function(e) NULL)
+    if (is.null(df) || nrow(df) == 0) return(data.frame(message = 'No rows found in hospital_operations'))
+    df
+  }, striped = TRUE, hover = TRUE, bordered = TRUE)
+  output$sample_women_basic <- renderTable({
+    req(conn())
+    df <- tryCatch(dbGetQuery(conn(), 'SELECT * FROM women_admission LIMIT 10'), error = function(e) NULL)
+    if (is.null(df) || nrow(df) == 0) return(data.frame(message = 'No rows found in women_admission'))
+    df
+  }, striped = TRUE, hover = TRUE, bordered = TRUE)
+  output$sample_troops_basic <- renderTable({
+    req(conn())
+    df <- tryCatch(dbGetQuery(conn(), 'SELECT * FROM troops LIMIT 10'), error = function(e) NULL)
+    if (is.null(df) || nrow(df) == 0) return(data.frame(message = 'No rows found in troops'))
+    df
+  }, striped = TRUE, hover = TRUE, bordered = TRUE)
+
+  # Ensure plots render even when tabs are hidden
+  for (id in c(
+    'ops_summary', 'temporal_plot', 'geographic_plot',
+    'med_women_time', 'med_acts_time', 'med_region_women', 'med_punish_time', 'med_corr_scatter',
+    'acts_by_station', 'stations_map', 'ops_table', 'data_table', 'stations_editable', 'db_status_table', 'overview_markdown'
+  )) {
+    try(outputOptions(output, id, suspendWhenHidden = FALSE), silent = TRUE)
+  }
+
+  # Geocode helper (Nominatim) - will run from the app host when button clicked
+  geocode_one <- function(query) {
+    url <- paste0('https://nominatim.openstreetmap.org/search?format=json&q=', URLencode(query))
+    res <- tryCatch(httr::GET(url, httr::user_agent('medical_lock_geocoder/1.0 (contact@example.com)')), error = function(e) NULL)
+    if (is.null(res) || res$status_code != 200) return(NULL)
+    body <- httr::content(res, as = 'text', encoding = 'UTF-8')
+    js <- jsonlite::fromJSON(body)
+    if (length(js) == 0) return(NULL)
+    return(list(lat = as.numeric(js[[1]]$lat), lon = as.numeric(js[[1]]$lon)))
+  }
+
+  # Handle geocode button clicks from either tab
+  observeEvent({ input$geocode_missing_map; input$geocode_missing_analysis }, {
+    showNotification('Geocoding started — this will call Nominatim for each missing station (rate-limited).', type = 'message')
+    sts <- dbGetQuery(conn(), 'SELECT station_id, name, region, country, latitude, longitude FROM stations')
+    missing <- sts %>% filter(is.na(latitude) | is.na(longitude) | latitude == '' | longitude == '')
+    if (nrow(missing) == 0) { showNotification('No missing coordinates found.', type = 'message'); return() }
+    updates <- list()
+    for (i in seq_len(nrow(missing))) {
+      q <- paste(missing$name[i], missing$region[i], missing$country[i], sep = ', ')
+      Sys.sleep(1) # polite pause
+      geo <- geocode_one(q)
+      if (!is.null(geo)) updates[[length(updates) + 1]] <- list(station_id = missing$station_id[i], lat = geo$lat, lon = geo$lon)
+    }
+    if (length(updates) > 0) {
+      for (u in updates) {
+        dbExecute(conn(), 'UPDATE stations SET latitude = ?, longitude = ? WHERE station_id = ?', params = list(u$lat, u$lon, u$station_id))
+      }
+      new_sts <- dbGetQuery(conn(), 'SELECT * FROM stations')
+      write.csv(new_sts, 'stations_geocoded.csv', row.names = FALSE)
+      showNotification(paste0('Geocoding complete. Updated ', length(updates), ' stations. Backup written to stations_geocoded.csv'), type = 'message')
+    } else {
+      showNotification('Geocoding completed but no coordinates were found.', type = 'warning')
+    }
+  })
+}
+
+# Run the application (standard pattern so `shiny::runApp(".")` works)
+options(shiny.autoload.r = FALSE)
+options(shiny.sanitize.errors = FALSE)
+shinyApp(ui = ui, server = server)

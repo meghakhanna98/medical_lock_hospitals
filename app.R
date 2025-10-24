@@ -1,3 +1,6 @@
+# Medical Lock Hospitals Data Explorer
+# Shiny App for data exploration and cleaning
+
 library(shiny)
 library(DBI)
 library(RSQLite)
@@ -7,9 +10,6 @@ library(dplyr)
 library(ggplot2)
 library(shinyWidgets)
 library(shinydashboard)
-library(leaflet)
-library(httr)
-library(jsonlite)
 
 # Database connection function
 connect_to_db <- function() {
@@ -26,11 +26,11 @@ ui <- dashboardPage(
   
   dashboardSidebar(
     sidebarMenu(
-      menuItem("Hospital Operations", tabName = "operations", icon = icon("hospital")),
-      menuItem("Data Overview", tabName = "data_overview", icon = icon("info-circle")),
+      menuItem("Data Overview", tabName = "overview", icon = icon("dashboard")),
       menuItem("Data Tables", tabName = "tables", icon = icon("table")),
-      menuItem("Analysis", tabName = "analysis", icon = icon("chart-bar")),
-      menuItem("Visualizations", tabName = "visualizations", icon = icon("chart-line"))
+      menuItem("Data Cleaning", tabName = "cleaning", icon = icon("broom")),
+      menuItem("Visualizations", tabName = "visualizations", icon = icon("chart-bar")),
+      menuItem("Data Export", tabName = "export", icon = icon("download"))
     )
   ),
   
@@ -48,127 +48,174 @@ ui <- dashboardPage(
     ),
     
     tabItems(
-      # Hospital Operations Tab
-      tabItem(tabName = "operations",
+      # Overview Tab
+      tabItem(tabName = "overview",
         fluidRow(
           box(
-            title = "Hospital Operations Explorer", status = "primary", solidHeader = TRUE,
+            title = "Database Summary", status = "primary", solidHeader = TRUE,
             width = 12,
             fluidRow(
-              column(3,
-                selectInput("year", "Year:", choices = c("All"), selected = "All")
+              column(3, 
+                valueBoxOutput("total_documents", width = 12)
               ),
               column(3,
-                selectInput("region", "Region:", choices = c("All"), selected = "All")
+                valueBoxOutput("total_stations", width = 12)
               ),
               column(3,
-                selectInput("country", "Country:", choices = c("All"), selected = "All")
+                valueBoxOutput("total_women_records", width = 12)
               ),
               column(3,
-                selectInput("act", "Act:", choices = c("All"), selected = "All")
+                valueBoxOutput("total_troop_records", width = 12)
               )
             ),
             br(),
-            DT::dataTableOutput("ops_table"),
-            br(),
-            downloadButton("download_csv", "Download Filtered Data")
-          )
-        ),
-        fluidRow(
-          box(
-            title = "Summary Statistics", status = "info", solidHeader = TRUE,
-            width = 12,
-            plotlyOutput("ops_summary")
-          )
-        )
-      ),
-
-        # Data Overview Tab (empty for now)
-        tabItem(tabName = "data_overview",
-          h2("Data Overview"),
-          p("This page will provide a summary of the data sources and key metrics. Coming soon!")
-        ),
-      
-      # Data Tables Tab
-      tabItem(tabName = "tables",
-        fluidRow(
-          box(
-            title = "Database Tables", status = "success", solidHeader = TRUE,
-            width = 12,
-            selectInput("table_select", "Select Table:",
-              choices = c("hospital_operations", "hospital_notes", "documents", "stations", "station_reports", "troops", "women_admission"),
-              selected = "hospital_operations"
-            ),
-            conditionalPanel(
-              condition = "input.table_select == 'stations'",
-              div(
-                h4("Stations Data (Click cells to edit)"),
-                helpText("Click cells in Region, Country, Latitude, or Longitude to edit."),
-                DTOutput("stations_editable")
+            fluidRow(
+              column(6,
+                box(
+                  title = "Data Quality Summary", status = "info", solidHeader = TRUE,
+                  width = 12,
+                  DT::dataTableOutput("quality_summary")
+                )
+              ),
+              column(6,
+                box(
+                  title = "Missing Data Overview", status = "warning", solidHeader = TRUE,
+                  width = 12,
+                  plotlyOutput("missing_data_plot")
+                )
               )
-            ),
-            conditionalPanel(
-              condition = "input.table_select != 'stations'",
-              DT::dataTableOutput("data_table")
             )
           )
         )
       ),
       
-      # Analysis Tab
-      tabItem(tabName = "analysis",
+      # Data Tables Tab
+      tabItem(tabName = "tables",
         fluidRow(
           box(
-            title = "Temporal Analysis", status = "info", solidHeader = TRUE,
-            width = 6,
-            plotlyOutput("temporal_plot")
-          ),
-          box(
-            title = "Geographic Distribution", status = "primary", solidHeader = TRUE,
-            width = 6,
-            plotlyOutput("geographic_plot")
-          )
-        ),
-        fluidRow(
-          box(
-            title = "Map Controls", status = "info", solidHeader = TRUE,
+            title = "Select Table to View", status = "primary", solidHeader = TRUE,
             width = 12,
-            actionButton("geocode_missing", "Geocode missing stations", icon = icon("map-marker-alt")),
-            helpText("Click to geocode stations missing latitude/longitude using Nominatim (runs from the app host).")
-          )
-        ),
-        fluidRow(
-          box(
-            title = "Data Quality Overview", status = "success", solidHeader = TRUE,
-            width = 12,
-            DT::dataTableOutput("quality_summary")
+            selectInput("table_select", "Choose Table:",
+              choices = c("documents", "stations", "station_reports", 
+                         "women_data", "troop_data", "hospital_operations"),
+              selected = "documents"
+            ),
+            br(),
+            DT::dataTableOutput("data_table")
           )
         )
-      )
-      ,
+      ),
+      
+      # Data Cleaning Tab
+      tabItem(tabName = "cleaning",
+        fluidRow(
+          box(
+            title = "Data Cleaning Tools", status = "success", solidHeader = TRUE,
+            width = 12,
+            tabsetPanel(
+              tabPanel("Duplicate Detection",
+                br(),
+                selectInput("clean_table_select", "Select Table:",
+                  choices = c("documents", "stations", "station_reports", 
+                             "women_data", "troop_data", "hospital_operations")
+                ),
+                actionButton("find_duplicates", "Find Duplicates", class = "btn-warning"),
+                br(), br(),
+                DT::dataTableOutput("duplicates_table")
+              ),
+              
+              tabPanel("Data Validation",
+                br(),
+                selectInput("validate_table_select", "Select Table:",
+                  choices = c("documents", "stations", "station_reports", 
+                             "women_data", "troop_data", "hospital_operations")
+                ),
+                actionButton("validate_data", "Validate Data", class = "btn-info"),
+                br(), br(),
+                verbatimTextOutput("validation_results")
+              ),
+              
+              tabPanel("Filter & Search",
+                br(),
+                selectInput("filter_table_select", "Select Table:",
+                  choices = c("documents", "stations", "station_reports", 
+                             "women_data", "troop_data", "hospital_operations")
+                ),
+                uiOutput("filter_controls"),
+                br(),
+                DT::dataTableOutput("filtered_table")
+              )
+            )
+          )
+        )
+      ),
+      
       # Visualizations Tab
       tabItem(tabName = "visualizations",
         fluidRow(
           box(
-            title = "Acts by Station", status = "primary", solidHeader = TRUE,
-            width = 6,
-            selectInput("viz_act", "Act:", choices = c("All"), selected = "All"),
-            selectInput("viz_region", "Region:", choices = c("All"), selected = "All"),
-            plotlyOutput("acts_by_station")
-          ),
-          box(
-            title = "Stations Map", status = "info", solidHeader = TRUE,
-            width = 6,
-            actionButton("geocode_missing_viz", "Geocode missing stations", icon = icon("map-marker-alt")),
-            helpText("Markers show stations. Click a marker for acts and counts."),
-            leafletOutput("stations_map", height = 550)
+            title = "Data Visualizations", status = "info", solidHeader = TRUE,
+            width = 12,
+            tabsetPanel(
+              tabPanel("Temporal Analysis",
+                br(),
+                selectInput("time_plot_type", "Plot Type:",
+                  choices = c("Women Data by Year", "Troop Data by Year", 
+                             "Hospital Operations by Year", "Combined Timeline")
+                ),
+                plotlyOutput("temporal_plot")
+              ),
+              
+              tabPanel("Geographic Analysis",
+                br(),
+                selectInput("geo_plot_type", "Geographic View:",
+                  choices = c("Stations by Region", "Operations by Country", 
+                             "Regional Distribution")
+                ),
+                plotlyOutput("geographic_plot")
+              ),
+              
+              tabPanel("Statistical Analysis",
+                br(),
+                selectInput("stat_plot_type", "Statistical View:",
+                  choices = c("Women vs Troop Strength", "Station Activity Levels",
+                             "Document Coverage")
+                ),
+                plotlyOutput("statistical_plot")
+              )
+            )
           )
-        ),
+        )
+      ),
+      
+      # Export Tab
+      tabItem(tabName = "export",
         fluidRow(
           box(
-            title = "Acts Table", status = "success", solidHeader = TRUE,
+            title = "Data Export", status = "success", solidHeader = TRUE,
             width = 12,
-            DT::dataTableOutput("acts_table")
+            fluidRow(
+              column(6,
+                selectInput("export_table", "Select Table to Export:",
+                  choices = c("documents", "stations", "station_reports", 
+                             "women_data", "troop_data", "hospital_operations")
+                ),
+                selectInput("export_format", "Export Format:",
+                  choices = c("CSV", "Excel", "JSON")
+                ),
+                actionButton("export_data", "Export Data", class = "btn-success")
+              ),
+              column(6,
+                h4("Custom Query Export"),
+                textAreaInput("custom_query", "Enter SQL Query:", 
+                  placeholder = "SELECT * FROM women_data WHERE year > 1880",
+                  rows = 4
+                ),
+                actionButton("export_query", "Export Query Results", class = "btn-primary")
+              )
+            ),
+            br(),
+            verbatimTextOutput("export_status")
           )
         )
       )
@@ -178,6 +225,7 @@ ui <- dashboardPage(
 
 # Server
 server <- function(input, output, session) {
+  
   # Database connection
   conn <- reactive({
     connect_to_db()
@@ -190,338 +238,343 @@ server <- function(input, output, session) {
     }
   })
   
-  # Reactive value for hospital operations data
-  ops_data <- reactive({
-    data <- dbGetQuery(conn(), "SELECT * FROM hospital_operations")
-    if ("year" %in% names(data)) data$year <- as.integer(data$year)
-    return(data)
+  # Overview Tab - Value Boxes
+  output$total_documents <- renderValueBox({
+    count <- dbGetQuery(conn(), "SELECT COUNT(*) as count FROM documents")$count
+    valueBox(count, "Documents", icon = icon("file-alt"), color = "blue")
   })
   
-  # Update filter choices
-  observe({
-    data <- ops_data()
-    updateSelectInput(session, "year", 
-      choices = c("All", sort(unique(na.omit(data$year)))),
-      selected = "All"
-    )
-    updateSelectInput(session, "region", 
-      choices = c("All", sort(unique(na.omit(data$region)))),
-      selected = "All"
-    )
-    updateSelectInput(session, "country", 
-      choices = c("All", sort(unique(na.omit(data$country)))),
-      selected = "All"
-    )
-    updateSelectInput(session, "act", 
-      choices = c("All", sort(unique(na.omit(data$act)))),
-      selected = "All"
-    )
+  output$total_stations <- renderValueBox({
+    count <- dbGetQuery(conn(), "SELECT COUNT(*) as count FROM stations")$count
+    valueBox(count, "Stations", icon = icon("map-marker-alt"), color = "green")
   })
   
-  # Filter data based on inputs
-  filtered_data <- reactive({
-    data <- ops_data()
-    
-    if (input$year != "All") {
-      data <- data[data$year == as.integer(input$year), ]
-    }
-    if (input$region != "All") {
-      data <- data[data$region == input$region, ]
-    }
-    if (input$country != "All") {
-      data <- data[data$country == input$country, ]
-    }
-    if (input$act != "All") {
-      data <- data[data$act == input$act, ]
-    }
-    
-    return(data)
+  output$total_women_records <- renderValueBox({
+    count <- dbGetQuery(conn(), "SELECT COUNT(*) as count FROM women_data")$count
+    valueBox(count, "Women Records", icon = icon("female"), color = "purple")
   })
   
-  # Operations table output
-  output$ops_table <- DT::renderDataTable({
-    DT::datatable(
-      filtered_data(),
-      options = list(
-        pageLength = 25,
-        scrollX = TRUE,
-        dom = 'Bfrtip',
-        buttons = c('copy', 'csv', 'excel')
-      ),
-      extensions = 'Buttons'
-    )
+  output$total_troop_records <- renderValueBox({
+    count <- dbGetQuery(conn(), "SELECT COUNT(*) as count FROM troop_data")$count
+    valueBox(count, "Troop Records", icon = icon("users"), color = "orange")
   })
   
-  # Download handler
-  output$download_csv <- downloadHandler(
-    filename = function() {
-      paste0("hospital_operations_", Sys.Date(), ".csv")
-    },
-    content = function(file) {
-      write.csv(filtered_data(), file, row.names = FALSE)
-    }
-  )
-  
-  # Operations summary plot
-  output$ops_summary <- renderPlotly({
-    data <- filtered_data()
-    p <- plot_ly(data, x = ~year) %>%
-      add_trace(type = "histogram", name = "Operations per Year") %>%
-      layout(
-        title = "Distribution of Operations by Year",
-        xaxis = list(title = "Year"),
-        yaxis = list(title = "Count")
-      )
-    p
-  })
-  
-  # Data tables view
-  output$data_table <- DT::renderDataTable({
-    table_name <- input$table_select
-    data <- dbGetQuery(conn(), paste("SELECT * FROM", table_name))
-    # For stations table, rename 'name' to 'station_name' for display
-    if (table_name == "stations" && "name" %in% names(data)) {
-      names(data)[names(data) == "name"] <- "station_name"
-    }
-    DT::datatable(
-      data,
-      editable = TRUE,
-      options = list(
-        pageLength = 25,
-        scrollX = TRUE,
-        dom = 'Bfrtip',
-        buttons = c('copy', 'csv', 'excel')
-      ),
-      extensions = 'Buttons'
-    )
-  })
-
-  # Handle table edits
-  observeEvent(input$data_table_cell_edit, {
-    info <- input$data_table_cell_edit
-    i <- info$row
-    j <- info$col + 1  # Column index is 0-based in the callback
-    v <- info$value
-    
-    # Get current table name and data
-    table_name <- input$table_select
-    data <- dbGetQuery(conn(), paste("SELECT * FROM", table_name))
-    col_names <- names(data)
-    
-    if (j >= 1 && j <= length(col_names)) {
-      colname <- col_names[j]
-      id_col <- names(data)[1]  # Assume first column is the ID column
-      row_id <- data[[id_col]][i]
-      
-      # Execute update
-      query <- sprintf("UPDATE %s SET %s = ? WHERE %s = ?", table_name, colname, id_col)
-      dbExecute(conn(), query, params = list(v, row_id))
-      
-      # Show notification
-      showNotification(
-        sprintf("Updated %s to '%s' for row ID %s in table %s", colname, v, row_id, table_name),
-        type = "message"
-      )
-    }
-  })
-
-  # Editable stations table for region/country/coordinates
-  output$stations_editable <- DT::renderDT({
-    data <- dbGetQuery(conn(), "SELECT station_id, name AS station_name, region, country, latitude, longitude FROM stations")
-    datatable(
-      data,
-      editable = list(target = "cell", columns = c(3, 4, 5, 6)), # region (3), country (4), latitude (5), longitude (6)
-      options = list(pageLength = 25, scrollX = TRUE)
-    )
-  })
-
-  # Save edits to stations table
-  observeEvent(input$stations_editable_cell_edit, {
-    info <- input$stations_editable_cell_edit
-    i <- info$row
-    j <- info$col
-    v <- info$value
-    # Allow edits to region (3), country (4), latitude (5), longitude (6)
-    if (j %in% c(3, 4, 5, 6)) {
-      data <- dbGetQuery(conn(), "SELECT station_id, name AS station_name, region, country, latitude, longitude FROM stations")
-      station_id <- data$station_id[i]
-      colname <- switch(as.character(j), `3` = "region", `4` = "country", `5` = "latitude", `6` = "longitude")
-      # Validate numeric for lat/lon
-      if (colname %in% c("latitude", "longitude")) {
-        num <- suppressWarnings(as.numeric(v))
-        if (is.na(num)) {
-          showNotification(sprintf("Invalid value '%s' for %s; please enter a number.", v, colname), type = "error")
-          return()
-        }
-        # Optional bounds check
-        if (colname == "latitude" && (num < -90 || num > 90)) {
-          showNotification("Latitude must be between -90 and 90.", type = "error")
-          return()
-        }
-        if (colname == "longitude" && (num < -180 || num > 180)) {
-          showNotification("Longitude must be between -180 and 180.", type = "error")
-          return()
-        }
-        v <- num
-      }
-      dbExecute(conn(), paste0("UPDATE stations SET ", colname, " = ? WHERE station_id = ?"), params = list(v, station_id))
-      showNotification(paste("Updated", colname, "for station_id", station_id), type = "message")
-    }
-  })
-  
-  # Temporal analysis plot
-  output$temporal_plot <- renderPlotly({
-    data <- ops_data()
-    yearly_counts <- data %>%
-      group_by(year) %>%
-      summarise(count = n()) %>%
-      arrange(year)
-    
-    plot_ly(yearly_counts, x = ~year, y = ~count, type = "scatter", mode = "lines+markers") %>%
-      layout(
-        title = "Operations Over Time",
-        xaxis = list(title = "Year"),
-        yaxis = list(title = "Number of Operations")
-      )
-  })
-  
-  # Geographic distribution plot
-  output$geographic_plot <- renderPlotly({
-    data <- ops_data()
-    region_counts <- data %>%
-      group_by(region) %>%
-      summarise(count = n()) %>%
-      arrange(desc(count))
-    
-    plot_ly(region_counts, x = ~reorder(region, count), y = ~count, type = "bar") %>%
-      layout(
-        title = "Operations by Region",
-        xaxis = list(title = "Region", tickangle = 45),
-        yaxis = list(title = "Number of Operations")
-      )
-  })
-  
-  # Data quality summary
+  # Data Quality Summary
   output$quality_summary <- DT::renderDataTable({
-    data <- ops_data()
-    quality_df <- data.frame(
-      Column = names(data),
-      Total_Records = nrow(data),
-      Missing_Values = sapply(data, function(x) sum(is.na(x))),
-      Complete_Values = sapply(data, function(x) sum(!is.na(x))),
-      Completeness_Pct = sapply(data, function(x) round(sum(!is.na(x))/length(x)*100, 2))
+    tables <- c("documents", "stations", "station_reports", "women_data", "troop_data", "hospital_operations")
+    quality_data <- data.frame(
+      Table = tables,
+      Total_Records = sapply(tables, function(t) {
+        dbGetQuery(conn(), paste("SELECT COUNT(*) as count FROM", t))$count
+      }),
+      Complete_Records = sapply(tables, function(t) {
+        # Count records with no NULL values in key columns
+        if (t == "documents") {
+          dbGetQuery(conn(), paste("SELECT COUNT(*) as count FROM", t, "WHERE doc_id IS NOT NULL AND source_name IS NOT NULL"))$count
+        } else if (t == "stations") {
+          dbGetQuery(conn(), paste("SELECT COUNT(*) as count FROM", t, "WHERE name IS NOT NULL"))$count
+        } else {
+          dbGetQuery(conn(), paste("SELECT COUNT(*) as count FROM", t, "WHERE unique_id IS NOT NULL OR hid IS NOT NULL"))$count
+        }
+      })
+    )
+    quality_data$Completeness <- round(quality_data$Complete_Records / quality_data$Total_Records * 100, 1)
+    quality_data
+  }, options = list(pageLength = 6, dom = 't'))
+  
+  # Missing Data Plot
+  output$missing_data_plot <- renderPlotly({
+    tables <- c("documents", "stations", "station_reports", "women_data", "troop_data", "hospital_operations")
+    missing_data <- data.frame(
+      Table = tables,
+      Missing_Percentage = sapply(tables, function(t) {
+        # Calculate percentage of records with missing key data
+        total <- dbGetQuery(conn(), paste("SELECT COUNT(*) as count FROM", t))$count
+        if (t == "documents") {
+          complete <- dbGetQuery(conn(), paste("SELECT COUNT(*) as count FROM", t, "WHERE doc_id IS NOT NULL AND source_name IS NOT NULL"))$count
+        } else if (t == "stations") {
+          complete <- dbGetQuery(conn(), paste("SELECT COUNT(*) as count FROM", t, "WHERE name IS NOT NULL"))$count
+        } else {
+          complete <- dbGetQuery(conn(), paste("SELECT COUNT(*) as count FROM", t, "WHERE unique_id IS NOT NULL OR hid IS NOT NULL"))$count
+        }
+        round((total - complete) / total * 100, 1)
+      })
     )
     
-    DT::datatable(
-      quality_df,
-      options = list(
-        pageLength = 10,
-        dom = 't'
+    p <- ggplot(missing_data, aes(x = Table, y = Missing_Percentage, fill = Table)) +
+      geom_bar(stat = "identity") +
+      theme_minimal() +
+      theme(axis.text.x = element_text(angle = 45, hjust = 1)) +
+      labs(title = "Missing Data Percentage by Table", 
+           x = "Table", y = "Missing Data (%)") +
+      scale_fill_viridis_d()
+    
+    ggplotly(p)
+  })
+  
+  # Data Tables Tab
+  output$data_table <- DT::renderDataTable({
+    query <- paste("SELECT * FROM", input$table_select)
+    data <- dbGetQuery(conn(), query)
+    DT::datatable(data, options = list(
+      pageLength = 25,
+      scrollX = TRUE,
+      dom = 'Bfrtip',
+      buttons = c('copy', 'csv', 'excel', 'pdf', 'print')
+    ), extensions = 'Buttons')
+  })
+  
+  # Data Cleaning - Duplicate Detection
+  observeEvent(input$find_duplicates, {
+    table_name <- input$clean_table_select
+    
+    if (table_name == "documents") {
+      query <- paste("SELECT doc_id, source_name, type, COUNT(*) as count FROM", table_name, 
+                     "GROUP BY doc_id, source_name, type HAVING COUNT(*) > 1")
+    } else if (table_name == "stations") {
+      query <- paste("SELECT name, region, country, COUNT(*) as count FROM", table_name, 
+                     "GROUP BY name, region, country HAVING COUNT(*) > 1")
+    } else {
+      query <- paste("SELECT * FROM", table_name, "WHERE rowid NOT IN (SELECT MIN(rowid) FROM", table_name, "GROUP BY", 
+                     ifelse(table_name %in% c("women_data", "troop_data"), "unique_id", "hid"), ")")
+    }
+    
+    duplicates <- dbGetQuery(conn(), query)
+    output$duplicates_table <- DT::renderDataTable({
+      DT::datatable(duplicates, options = list(pageLength = 10))
+    })
+  })
+  
+  # Data Cleaning - Validation
+  observeEvent(input$validate_data, {
+    table_name <- input$validate_table_select
+    
+    validation_results <- paste("Validation Results for", table_name, ":\n\n")
+    
+    # Check for NULL values in key columns
+    if (table_name == "documents") {
+      null_check <- dbGetQuery(conn(), paste("SELECT COUNT(*) as count FROM", table_name, "WHERE doc_id IS NULL OR source_name IS NULL"))
+      validation_results <- paste(validation_results, "Records with NULL doc_id or source_name:", null_check$count, "\n")
+    } else if (table_name == "stations") {
+      null_check <- dbGetQuery(conn(), paste("SELECT COUNT(*) as count FROM", table_name, "WHERE name IS NULL"))
+      validation_results <- paste(validation_results, "Records with NULL name:", null_check$count, "\n")
+    }
+    
+    # Check for empty strings
+    empty_check <- dbGetQuery(conn(), paste("SELECT COUNT(*) as count FROM", table_name, "WHERE doc_id = '' OR source_name = ''"))
+    validation_results <- paste(validation_results, "Records with empty strings:", empty_check$count, "\n")
+    
+    output$validation_results <- renderText(validation_results)
+  })
+  
+  # Filter Controls
+  output$filter_controls <- renderUI({
+    table_name <- input$filter_table_select
+    
+    # Get column names for the selected table
+    columns <- dbGetQuery(conn(), paste("PRAGMA table_info(", table_name, ")"))$name
+    
+    fluidRow(
+      column(6,
+        selectInput("filter_column", "Filter Column:", choices = columns)
+      ),
+      column(6,
+        textInput("filter_value", "Filter Value:", placeholder = "Enter value to filter by")
       )
     )
   })
-
-  # Populate Viz selectors
-  observe({
-    data <- ops_data()
-    acts <- sort(unique(na.omit(data$act)))
-    regions <- sort(unique(na.omit(data$region)))
-    updateSelectInput(session, "viz_act", choices = c("All", acts), selected = "All")
-    updateSelectInput(session, "viz_region", choices = c("All", regions), selected = "All")
-  })
-
-  # Acts by station plot
-  output$acts_by_station <- renderPlotly({
-    data <- ops_data()
-    df <- data
-    if (!is.null(input$viz_act) && input$viz_act != "All") df <- df[df$act == input$viz_act, ]
-    if (!is.null(input$viz_region) && input$viz_region != "All") df <- df[df$region == input$viz_region, ]
-    acts_station <- df %>% group_by(station) %>% summarise(count = n()) %>% arrange(desc(count)) %>% head(50)
-    plot_ly(acts_station, x = ~reorder(station, count), y = ~count, type = 'bar') %>%
-      layout(title = paste('Acts by Station', ifelse(input$viz_act == 'All', '', paste('-', input$viz_act))), xaxis = list(title = 'Station', tickangle = 45), yaxis = list(title = 'Count'))
-  })
-
-  # Acts table
-  output$acts_table <- DT::renderDataTable({
-    data <- ops_data()
-    df <- data
-    if (!is.null(input$viz_act) && input$viz_act != "All") df <- df[df$act == input$viz_act, ]
-    if (!is.null(input$viz_region) && input$viz_region != "All") df <- df[df$region == input$viz_region, ]
-    df %>% select(hid, station, region, country, year, act)
-  }, options = list(pageLength = 25, scrollX = TRUE))
-
-  # Stations map (clustered)
-  output$stations_map <- renderLeaflet({
-    ops <- ops_data()
-    sts <- dbGetQuery(conn(), "SELECT station_id, name, region, country, latitude, longitude FROM stations")
-    ops_counts <- ops %>% group_by(station) %>% summarise(count = n())
-    map_df <- sts %>% left_join(ops_counts, by = c('name' = 'station'))
-    m <- leaflet(map_df) %>% addProviderTiles(providers$CartoDB.Positron)
-    coords <- map_df %>% filter(!is.na(latitude) & !is.na(longitude) & latitude != '' & longitude != '')
-    if (nrow(coords) > 0) {
-      # compute acts per station for popup
-      acts_by_station <- ops %>% group_by(station, act) %>% summarise(n = n()) %>% arrange(station, desc(n))
-      popup_info <- sapply(seq_len(nrow(coords)), function(i) {
-        row <- coords[i, ]
-        st_name <- row$name
-        count <- ifelse(is.na(row$count), 0, row$count)
-        acts_rows <- acts_by_station %>% filter(station == st_name)
-        acts_html <- ''
-        if (nrow(acts_rows) > 0) {
-          items <- paste0('<li>', acts_rows$act, ' (', acts_rows$n, ')</li>', collapse = '')
-          acts_html <- paste0('<ul>', items, '</ul>')
-        } else {
-          acts_html <- '<i>No acts recorded</i>'
-        }
-        paste0('<b>', st_name, '</b><br/>Region: ', row$region, '<br/>Operations: ', count, '<br/>Acts:', acts_html)
-      })
-
-      m <- m %>% addCircleMarkers(lng = coords$longitude, lat = coords$latitude,
-                                  radius = ~ifelse(is.na(coords$count), 4, 4 + log1p(coords$count)),
-                                  label = ~paste0(name, ' (', region, ')'),
-                                  popup = popup_info,
-                                  clusterOptions = markerClusterOptions())
-    }
-    m
-  })
-
-  # Geocode helper (Nominatim) - will run from the app host when button clicked
-  geocode_one <- function(query) {
-    url <- paste0('https://nominatim.openstreetmap.org/search?format=json&q=', URLencode(query))
-    res <- tryCatch(httr::GET(url, httr::user_agent('medical_lock_geocoder/1.0 (contact@example.com)')), error = function(e) NULL)
-    if (is.null(res) || res$status_code != 200) return(NULL)
-    body <- httr::content(res, as = 'text', encoding = 'UTF-8')
-    js <- jsonlite::fromJSON(body)
-    if (length(js) == 0) return(NULL)
-    return(list(lat = as.numeric(js[[1]]$lat), lon = as.numeric(js[[1]]$lon)))
-  }
-
-  geocode_missing_batch <- function() {
-    showNotification('Geocoding started — this will call Nominatim for each missing station (rate-limited).', type = 'message')
-    sts <- dbGetQuery(conn(), 'SELECT station_id, name, region, country, latitude, longitude FROM stations')
-    missing <- sts %>% filter(is.na(latitude) | is.na(longitude) | latitude == '' | longitude == '')
-    if (nrow(missing) == 0) { showNotification('No missing coordinates found.', type = 'message'); return(invisible()) }
-    updates <- list()
-    for (i in seq_len(nrow(missing))) {
-      q <- paste(missing$name[i], missing$region[i], missing$country[i], sep = ', ')
-      Sys.sleep(1) # polite pause
-      geo <- geocode_one(q)
-      if (!is.null(geo)) updates[[length(updates) + 1]] <- list(station_id = missing$station_id[i], lat = geo$lat, lon = geo$lon)
-    }
-    if (length(updates) > 0) {
-      for (u in updates) {
-        dbExecute(conn(), 'UPDATE stations SET latitude = ?, longitude = ? WHERE station_id = ?', params = list(u$lat, u$lon, u$station_id))
-      }
-      new_sts <- dbGetQuery(conn(), 'SELECT * FROM stations')
-      write.csv(new_sts, 'stations_geocoded.csv', row.names = FALSE)
-      showNotification(paste0('Geocoding complete. Updated ', length(updates), ' stations. Backup written to stations_geocoded.csv'), type = 'message')
+  
+  # Filtered Table
+  output$filtered_table <- DT::renderDataTable({
+    table_name <- input$filter_table_select
+    column <- input$filter_column
+    value <- input$filter_value
+    
+    if (!is.null(column) && !is.null(value) && value != "") {
+      query <- paste("SELECT * FROM", table_name, "WHERE", column, "LIKE '%", value, "%'")
     } else {
-      showNotification('Geocoding completed but no coordinates were found.', type = 'warning')
+      query <- paste("SELECT * FROM", table_name)
     }
-  }
-
-  observeEvent(input$geocode_missing, { geocode_missing_batch() })
-  observeEvent(input$geocode_missing_viz, { geocode_missing_batch() })
+    
+    data <- dbGetQuery(conn(), query)
+    DT::datatable(data, options = list(pageLength = 25))
+  })
+  
+  # Visualizations - Temporal Analysis
+  output$temporal_plot <- renderPlotly({
+    if (input$time_plot_type == "Women Data by Year") {
+      data <- dbGetQuery(conn(), "SELECT year, COUNT(*) as count FROM women_data WHERE year IS NOT NULL GROUP BY year ORDER BY year")
+      p <- ggplot(data, aes(x = year, y = count)) +
+        geom_line(color = "purple", size = 1) +
+        geom_point(color = "purple", size = 2) +
+        theme_minimal() +
+        labs(title = "Women Data Records by Year", x = "Year", y = "Number of Records")
+    } else if (input$time_plot_type == "Troop Data by Year") {
+      data <- dbGetQuery(conn(), "SELECT year, COUNT(*) as count FROM troop_data WHERE year IS NOT NULL GROUP BY year ORDER BY year")
+      p <- ggplot(data, aes(x = year, y = count)) +
+        geom_line(color = "orange", size = 1) +
+        geom_point(color = "orange", size = 2) +
+        theme_minimal() +
+        labs(title = "Troop Data Records by Year", x = "Year", y = "Number of Records")
+    } else if (input$time_plot_type == "Hospital Operations by Year") {
+      data <- dbGetQuery(conn(), "SELECT year, COUNT(*) as count FROM hospital_operations WHERE year IS NOT NULL GROUP BY year ORDER BY year")
+      p <- ggplot(data, aes(x = year, y = count)) +
+        geom_line(color = "blue", size = 1) +
+        geom_point(color = "blue", size = 2) +
+        theme_minimal() +
+        labs(title = "Hospital Operations by Year", x = "Year", y = "Number of Operations")
+    } else {
+      # Combined timeline
+      women_data <- dbGetQuery(conn(), "SELECT year, COUNT(*) as count FROM women_data WHERE year IS NOT NULL GROUP BY year ORDER BY year")
+      troop_data <- dbGetQuery(conn(), "SELECT year, COUNT(*) as count FROM troop_data WHERE year IS NOT NULL GROUP BY year ORDER BY year")
+      
+      women_data$type <- "Women Data"
+      troop_data$type <- "Troop Data"
+      
+      combined_data <- rbind(women_data, troop_data)
+      
+      p <- ggplot(combined_data, aes(x = year, y = count, color = type)) +
+        geom_line(size = 1) +
+        geom_point(size = 2) +
+        theme_minimal() +
+        labs(title = "Combined Timeline: Women vs Troop Data", x = "Year", y = "Number of Records") +
+        scale_color_manual(values = c("purple", "orange"))
+    }
+    
+    ggplotly(p)
+  })
+  
+  # Geographic Analysis
+  output$geographic_plot <- renderPlotly({
+    if (input$geo_plot_type == "Stations by Region") {
+      data <- dbGetQuery(conn(), "SELECT region, COUNT(*) as count FROM stations WHERE region IS NOT NULL GROUP BY region ORDER BY count DESC")
+      p <- ggplot(data, aes(x = reorder(region, count), y = count, fill = region)) +
+        geom_bar(stat = "identity") +
+        coord_flip() +
+        theme_minimal() +
+        theme(legend.position = "none") +
+        labs(title = "Stations by Region", x = "Region", y = "Number of Stations")
+    } else if (input$geo_plot_type == "Operations by Country") {
+      data <- dbGetQuery(conn(), "SELECT country, COUNT(*) as count FROM hospital_operations WHERE country IS NOT NULL GROUP BY country ORDER BY count DESC")
+      p <- ggplot(data, aes(x = reorder(country, count), y = count, fill = country)) +
+        geom_bar(stat = "identity") +
+        coord_flip() +
+        theme_minimal() +
+        theme(legend.position = "none") +
+        labs(title = "Hospital Operations by Country", x = "Country", y = "Number of Operations")
+    } else {
+      # Regional Distribution
+      data <- dbGetQuery(conn(), "SELECT region, COUNT(*) as count FROM stations WHERE region IS NOT NULL GROUP BY region ORDER BY count DESC")
+      p <- ggplot(data, aes(x = "", y = count, fill = region)) +
+        geom_bar(stat = "identity", width = 1) +
+        coord_polar("y", start = 0) +
+        theme_void() +
+        labs(title = "Regional Distribution of Stations") +
+        theme(plot.title = element_text(hjust = 0.5))
+    }
+    
+    ggplotly(p)
+  })
+  
+  # Statistical Analysis
+  output$statistical_plot <- renderPlotly({
+    if (input$stat_plot_type == "Women vs Troop Strength") {
+      # This would require joining data and calculating averages
+      data <- dbGetQuery(conn(), "
+        SELECT w.station, w.year, w.women_added, t.avg_strength 
+        FROM women_data w 
+        LEFT JOIN troop_data t ON w.station = t.station AND w.year = t.year 
+        WHERE w.women_added IS NOT NULL AND t.avg_strength IS NOT NULL
+        LIMIT 50
+      ")
+      
+      if (nrow(data) > 0) {
+        p <- ggplot(data, aes(x = women_added, y = avg_strength)) +
+          geom_point(alpha = 0.6, color = "blue") +
+          geom_smooth(method = "lm", se = TRUE) +
+          theme_minimal() +
+          labs(title = "Women Added vs Troop Average Strength", 
+               x = "Women Added", y = "Average Troop Strength")
+      } else {
+        p <- ggplot() + 
+          annotate("text", x = 0.5, y = 0.5, label = "No matching data found", size = 6) +
+          theme_void()
+      }
+    } else if (input$stat_plot_type == "Station Activity Levels") {
+      data <- dbGetQuery(conn(), "
+        SELECT station, 
+               COUNT(DISTINCT doc_id) as document_count,
+               COUNT(*) as total_records
+        FROM women_data 
+        WHERE station IS NOT NULL 
+        GROUP BY station 
+        ORDER BY total_records DESC 
+        LIMIT 20
+      ")
+      
+      p <- ggplot(data, aes(x = reorder(station, total_records), y = total_records)) +
+        geom_bar(stat = "identity", fill = "steelblue") +
+        coord_flip() +
+        theme_minimal() +
+        labs(title = "Station Activity Levels (Top 20)", x = "Station", y = "Total Records")
+    } else {
+      # Document Coverage
+      data <- dbGetQuery(conn(), "
+        SELECT d.doc_id, d.source_name, COUNT(sr.report_id) as report_count
+        FROM documents d
+        LEFT JOIN station_reports sr ON d.doc_id = sr.doc_id
+        GROUP BY d.doc_id, d.source_name
+        ORDER BY report_count DESC
+      ")
+      
+      p <- ggplot(data, aes(x = reorder(doc_id, report_count), y = report_count)) +
+        geom_bar(stat = "identity", fill = "darkgreen") +
+        coord_flip() +
+        theme_minimal() +
+        labs(title = "Document Coverage by Station Reports", x = "Document ID", y = "Number of Station Reports")
+    }
+    
+    ggplotly(p)
+  })
+  
+  # Export functionality
+  observeEvent(input$export_data, {
+    table_name <- input$export_table
+    format <- input$export_format
+    
+    data <- dbGetQuery(conn(), paste("SELECT * FROM", table_name))
+    
+    if (format == "CSV") {
+      filename <- paste0(table_name, "_export.csv")
+      write.csv(data, filename, row.names = FALSE)
+      output$export_status <- renderText(paste("Data exported to", filename))
+    } else if (format == "Excel") {
+      filename <- paste0(table_name, "_export.xlsx")
+      writexl::write_xlsx(data, filename)
+      output$export_status <- renderText(paste("Data exported to", filename))
+    } else {
+      filename <- paste0(table_name, "_export.json")
+      jsonlite::write_json(data, filename)
+      output$export_status <- renderText(paste("Data exported to", filename))
+    }
+  })
+  
+  observeEvent(input$export_query, {
+    query <- input$custom_query
+    
+    if (query != "") {
+      tryCatch({
+        data <- dbGetQuery(conn(), query)
+        filename <- paste0("custom_query_export_", Sys.Date(), ".csv")
+        write.csv(data, filename, row.names = FALSE)
+        output$export_status <- renderText(paste("Query results exported to", filename))
+      }, error = function(e) {
+        output$export_status <- renderText(paste("Error executing query:", e$message))
+      })
+    } else {
+      output$export_status <- renderText("Please enter a SQL query")
+    }
+  })
 }
 
 # Run the application

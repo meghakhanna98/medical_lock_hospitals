@@ -28,11 +28,14 @@ install.packages(c(
 # Data export
 install.packages(c(
   "writexl",
-  "jsonlite"
+  "jsonlite",
+  "markdown"
 ))
 
 # Additional utilities
 install.packages(c(
   "viridis",
-  "RColorBrewer"
+  "RColorBrewer",
+  "leaflet",
+  "httr"
 ))
