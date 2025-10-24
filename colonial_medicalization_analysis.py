@@ -1,4 +1,4 @@
-"""
+ """
 COLONIAL MEDICALIZATION ANALYSIS
 How did the colonial state medicalize sexuality and transform women's bodies into administrative categories?
 

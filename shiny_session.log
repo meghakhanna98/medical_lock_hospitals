@@ -41,13 +41,6 @@ The following object is masked from ‘package:graphics’:
     box
 
 
-Attaching package: ‘httr’
-
-The following object is masked from ‘package:plotly’:
-
-    config
-
-
 Listening on http://127.0.0.1:8891
-[App Init] wd=/Users/meghakhanna/medical_lock_hospitals | db=/Users/meghakhanna/medical_lock_hospitals/medical_lock_hospitals.db | exists=TRUE
-[App Init] hospital_operations=362 | women_admission=306 | troops=301
+Warning: Using `size` aesthetic for lines was deprecated in ggplot2 3.4.0.
+ℹ Please use `linewidth` instead.
