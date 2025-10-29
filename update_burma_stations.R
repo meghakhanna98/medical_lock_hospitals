@@ -10,7 +10,7 @@ cat("Updating women_admission...\n")
 dbExecute(con, "UPDATE women_admission SET station = 'Thayetmyo' WHERE station = 'India (British Burma)'")
 
 cat("Updating troops...\n")
-dbExecute(con, "UPDATE troops SET station = 'Thayetmyo' WHERE station = 'India (British Burma)'")
+dbExecute(con, "UPDATE troops SET station = 'Thayetmyo' WHERE station = 'India (British Burma)'") # nolint: line_length_linter.
 
 cat("Updating hospital_operations...\n")
 dbExecute(con, "UPDATE hospital_operations SET station = 'Thayetmyo' WHERE station = 'India (British Burma)'")

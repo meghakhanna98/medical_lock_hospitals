@@ -32,6 +32,7 @@ ui <- dashboardPage(
       menuItem("Data Tables", tabName = "tables", icon = icon("table")),
       menuItem("Data Cleaning", tabName = "cleaning", icon = icon("broom")),
       menuItem("Visualizations", tabName = "visualizations", icon = icon("chart-bar")),
+      menuItem("Hospital Notes", tabName = "hospital_notes", icon = icon("clipboard")),
       menuItem("Data Export", tabName = "export", icon = icon("download"))
     )
   ),
@@ -52,6 +53,25 @@ ui <- dashboardPage(
     tabItems(
       # Overview Tab
       tabItem(tabName = "overview",
+        fluidRow(
+          box(
+            title = "About This Dataset", status = "info", solidHeader = TRUE,
+            width = 12,
+            p(style = "font-size: 15px; line-height: 1.6;",
+              "This dataset is built from nineteenth-century Lock Hospital Reports and Sanitary Commissioner's Reports produced under British rule in India. These records were part of a larger administrative effort to monitor women categorized as \"registered prostitutes\" under the Contagious Diseases Acts. Through these reports, the colonial state sought to control the spread of venereal disease among soldiers by transforming women's bodies into objects of record and inspection."
+            ),
+            p(style = "font-size: 15px; line-height: 1.6;",
+              "The figures contained in these documents—women admitted, discharged, fined, or imprisoned; soldiers treated for disease; hospitals opened or closed—offer insight into how public health became a language of governance. What appeared as medical management was deeply tied to moral discipline and imperial control."
+            ),
+            p(style = "font-size: 15px; line-height: 1.6;",
+              "Each entry in this dataset reflects the bureaucratic structure of the colonial state: the staffing of hospitals, the geography of cantonments, and the regular counting of \"registered\" and \"unregistered\" women. Taken together, these numbers allow us to see how the colonial government converted everyday life into data, turning acts of care into mechanisms of surveillance."
+            ),
+            p(style = "font-size: 15px; line-height: 1.6;",
+              strong("Rather than treating these figures as neutral statistics, this project reads them as evidence of how medicine, morality, and governance became intertwined in the making of empire.")
+            )
+          )
+        ),
+        br(),
         fluidRow(
           box(
             title = "Database Summary", status = "primary", solidHeader = TRUE,
@@ -104,6 +124,7 @@ ui <- dashboardPage(
             ),
             br(),
             DT::dataTableOutput("data_table")
+            
           )
         )
       ),
@@ -156,37 +177,10 @@ ui <- dashboardPage(
       tabItem(tabName = "visualizations",
         fluidRow(
           box(
-            title = "Data Visualizations", status = "info", solidHeader = TRUE,
+            title = "Medicalization Analysis", status = "info", solidHeader = TRUE,
             width = 12,
             tabsetPanel(
-              tabPanel("Temporal Analysis",
-                br(),
-                selectInput("time_plot_type", "Plot Type:",
-                  choices = c("Women Data by Year", "Troop Data by Year", 
-                             "Hospital Operations by Year", "Combined Timeline")
-                ),
-                plotlyOutput("temporal_plot")
-              ),
-              
-              tabPanel("Geographic Analysis",
-                br(),
-                selectInput("geo_plot_type", "Geographic View:",
-                  choices = c("Stations by Region", "Operations by Country", 
-                             "Regional Distribution")
-                ),
-                plotlyOutput("geographic_plot")
-              ),
-              
-              tabPanel("Statistical Analysis",
-                br(),
-                selectInput("stat_plot_type", "Statistical View:",
-                  choices = c("Women vs Troop Strength", "Station Activity Levels",
-                             "Document Coverage")
-                ),
-                plotlyOutput("statistical_plot")
-              ),
-              
-              tabPanel("Medicalization",
+              tabPanel("Temporal",
                 br(),
                 tabsetPanel(
                   tabPanel("Temporal",
@@ -252,6 +246,70 @@ ui <- dashboardPage(
                   tabPanel("Stations Map",
                     br(),
                     leafletOutput("stations_map", height = 600)
+                  ),
+                  tabPanel("Temporal-Spatial Correlation",
+                    br(),
+                    fluidRow(
+                      column(12,
+                        h4("Surveillance Intensity vs. Military VD Pressure Over Time"),
+                        p("This analysis reveals the relationship between troop venereal disease rates and women's registration — testing the military-medical nexus hypothesis."),
+                        plotlyOutput("correlation_dual_axis", height = 500)
+                      )
+                    ),
+                    br(),
+                    fluidRow(
+                      column(6, plotlyOutput("correlation_scatter")),
+                      column(6, plotlyOutput("correlation_heatmap"))
+                    ),
+                    br(),
+                    fluidRow(
+                      column(12,
+                        h4("Normalized Metrics by Region"),
+                        DT::dataTableOutput("correlation_metrics_table")
+                      )
+                    )
+                  ),
+                  tabPanel("Animated Timeline",
+                    br(),
+                    fluidRow(
+                      column(12,
+                        h4("Geographic Spread of Medicalization Over Time"),
+                        p("Use the slider to animate the year-by-year expansion of surveillance. Circle size = registered women; color = punishment intensity."),
+                        sliderInput("timeline_year", "Year:", 
+                                    min = 1873, max = 1890, value = 1873, 
+                                    step = 1, animate = animationOptions(interval = 1500, loop = TRUE)),
+                        leafletOutput("animated_timeline_map", height = 600)
+                      )
+                    ),
+                    br(),
+                    fluidRow(
+                      column(12,
+                        h4("Year-over-Year Change"),
+                        plotlyOutput("timeline_year_metrics")
+                      )
+                    )
+                  ),
+                  tabPanel("Disease Prevalence Map",
+                    br(),
+                    fluidRow(
+                      column(12,
+                        h4("Contagious Disease Distribution by Station"),
+                        p("Each station shows the distribution of disease categories recorded in women and troops."),
+                        selectInput("disease_map_metric", "Color stations by:",
+                                    choices = c("Total Disease Cases" = "total_diseases",
+                                               "Primary Syphilis Rate" = "primary_syphilis_rate",
+                                               "Secondary Syphilis Rate" = "secondary_syphilis_rate",
+                                               "Gonorrhoea Rate" = "gonorrhoea_rate",
+                                               "Troop VD Pressure" = "troop_vd_rate"),
+                                    selected = "total_diseases"),
+                        leafletOutput("disease_prevalence_map", height = 600)
+                      )
+                    ),
+                    br(),
+                    fluidRow(
+                      column(6, plotlyOutput("disease_comparison_women")),
+                      column(6, plotlyOutput("disease_comparison_troops"))
+                    )
                   )
                 )
               )
@@ -260,6 +318,43 @@ ui <- dashboardPage(
         )
       ),
       
+      # Hospital Notes Tab
+      tabItem(tabName = "hospital_notes",
+        fluidRow(
+          box(
+            title = "Hospital Notes (Cleaned)", status = "primary", solidHeader = TRUE,
+            width = 12,
+            fluidRow(
+              column(3,
+                uiOutput("hn_station_select")
+              ),
+              column(3,
+                uiOutput("hn_year_range")
+              ),
+              column(3,
+                selectInput("hn_country", "Country:", choices = c("All"), selected = "All")
+              ),
+              column(3,
+                textInput("hn_search", "Search Notes:", placeholder = "Find text in notes/remarks")
+              )
+            ),
+            br(),
+            fluidRow(
+              column(12,
+                DT::dataTableOutput("hospital_notes_table")
+              )
+            ),
+            br(),
+            fluidRow(
+              column(6, downloadButton("download_hospital_notes", "Download CSV", class = "btn-success")),
+              column(6, actionButton("hn_save_to_db", "Save Cleaned to Database", class = "btn-primary"))
+            ),
+            br(),
+            verbatimTextOutput("hn_save_status")
+          )
+        )
+      ),
+
       # Export Tab
       tabItem(tabName = "export",
         fluidRow(
@@ -305,9 +400,10 @@ server <- function(input, output, session) {
   
   # Close connection when app stops
   onStop(function() {
-    if (exists("conn")) {
-      dbDisconnect(conn())
-    }
+    # Safely disconnect without triggering reactive context errors
+    con_obj <- NULL
+    try({ con_obj <- isolate(conn()) }, silent = TRUE)
+    if (!is.null(con_obj)) try(DBI::dbDisconnect(con_obj), silent = TRUE)
   })
   
   # Overview Tab - Value Boxes
@@ -481,151 +577,6 @@ server <- function(input, output, session) {
   })
   
   # Visualizations - Temporal Analysis
-  output$temporal_plot <- renderPlotly({
-    if (input$time_plot_type == "Women Data by Year") {
-      data <- dbGetQuery(conn(), "SELECT year, COUNT(*) as count FROM women_admission WHERE year IS NOT NULL GROUP BY year ORDER BY year")
-      p <- ggplot(data, aes(x = year, y = count)) +
-        geom_line(color = "purple", size = 1) +
-        geom_point(color = "purple", size = 2) +
-        theme_minimal() +
-        labs(title = "Women Data Records by Year", x = "Year", y = "Number of Records")
-    } else if (input$time_plot_type == "Troop Data by Year") {
-      data <- dbGetQuery(conn(), "SELECT year, COUNT(*) as count FROM troops WHERE year IS NOT NULL GROUP BY year ORDER BY year")
-      p <- ggplot(data, aes(x = year, y = count)) +
-        geom_line(color = "orange", size = 1) +
-        geom_point(color = "orange", size = 2) +
-        theme_minimal() +
-        labs(title = "Troop Data Records by Year", x = "Year", y = "Number of Records")
-    } else if (input$time_plot_type == "Hospital Operations by Year") {
-      data <- dbGetQuery(conn(), "SELECT year, COUNT(*) as count FROM hospital_operations WHERE year IS NOT NULL GROUP BY year ORDER BY year")
-      p <- ggplot(data, aes(x = year, y = count)) +
-        geom_line(color = "blue", size = 1) +
-        geom_point(color = "blue", size = 2) +
-        theme_minimal() +
-        labs(title = "Hospital Operations by Year", x = "Year", y = "Number of Operations")
-    } else {
-      # Combined timeline
-      women_data <- dbGetQuery(conn(), "SELECT year, COUNT(*) as count FROM women_admission WHERE year IS NOT NULL GROUP BY year ORDER BY year")
-      troop_data <- dbGetQuery(conn(), "SELECT year, COUNT(*) as count FROM troops WHERE year IS NOT NULL GROUP BY year ORDER BY year")
-      
-      women_data$type <- "Women Data"
-      troop_data$type <- "Troop Data"
-      
-      combined_data <- rbind(women_data, troop_data)
-      
-      p <- ggplot(combined_data, aes(x = year, y = count, color = type)) +
-        geom_line(size = 1) +
-        geom_point(size = 2) +
-        theme_minimal() +
-        labs(title = "Combined Timeline: Women vs Troop Data", x = "Year", y = "Number of Records") +
-        scale_color_manual(values = c("purple", "orange"))
-    }
-    
-    ggplotly(p)
-  })
-  
-  # Geographic Analysis
-  output$geographic_plot <- renderPlotly({
-    if (input$geo_plot_type == "Stations by Region") {
-      data <- dbGetQuery(conn(), "SELECT region, COUNT(*) as count FROM stations WHERE region IS NOT NULL GROUP BY region ORDER BY count DESC")
-      if (nrow(data) == 0) {
-        return(ggplotly(ggplot() + theme_void() + ggtitle("No data for Stations by Region")))
-      }
-      p <- ggplot(data, aes(x = reorder(region, count), y = count, fill = region)) +
-        geom_bar(stat = "identity") +
-        coord_flip() +
-        theme_minimal() +
-        theme(legend.position = "none") +
-        labs(title = "Stations by Region", x = "Region", y = "Number of Stations")
-    } else if (input$geo_plot_type == "Operations by Country") {
-      data <- dbGetQuery(conn(), "SELECT country, COUNT(*) as count FROM hospital_operations WHERE country IS NOT NULL GROUP BY country ORDER BY count DESC")
-      if (nrow(data) == 0) {
-        return(ggplotly(ggplot() + theme_void() + ggtitle("No data for Operations by Country")))
-      }
-      p <- ggplot(data, aes(x = reorder(country, count), y = count, fill = country)) +
-        geom_bar(stat = "identity") +
-        coord_flip() +
-        theme_minimal() +
-        theme(legend.position = "none") +
-        labs(title = "Hospital Operations by Country", x = "Country", y = "Number of Operations")
-    } else {
-      # Regional Distribution
-      data <- dbGetQuery(conn(), "SELECT region, COUNT(*) as count FROM stations WHERE region IS NOT NULL GROUP BY region ORDER BY count DESC")
-      if (nrow(data) == 0) {
-        return(ggplotly(ggplot() + theme_void() + ggtitle("No data for Regional Distribution")))
-      }
-      p <- ggplot(data, aes(x = "", y = count, fill = region)) +
-        geom_bar(stat = "identity", width = 1) +
-        coord_polar("y", start = 0) +
-        theme_void() +
-        labs(title = "Regional Distribution of Stations") +
-        theme(plot.title = element_text(hjust = 0.5))
-    }
-    
-    ggplotly(p)
-  })
-  
-  # Statistical Analysis
-  output$statistical_plot <- renderPlotly({
-    if (input$stat_plot_type == "Women vs Troop Strength") {
-      # This would require joining data and calculating averages
-      data <- dbGetQuery(conn(), "
-        SELECT w.station, w.year, w.women_added, t.avg_strength 
-        FROM women_admission w 
-        LEFT JOIN troops t ON w.station = t.station AND w.year = t.year 
-        WHERE w.women_added IS NOT NULL AND t.avg_strength IS NOT NULL
-        LIMIT 50
-      ")
-      
-      if (nrow(data) > 0) {
-        p <- ggplot(data, aes(x = women_added, y = avg_strength)) +
-          geom_point(alpha = 0.6, color = "blue") +
-          geom_smooth(method = "lm", se = TRUE) +
-          theme_minimal() +
-          labs(title = "Women Added vs Troop Average Strength", 
-               x = "Women Added", y = "Average Troop Strength")
-      } else {
-        p <- ggplot() + 
-          annotate("text", x = 0.5, y = 0.5, label = "No matching data found", size = 6) +
-          theme_void()
-      }
-    } else if (input$stat_plot_type == "Station Activity Levels") {
-      data <- dbGetQuery(conn(), "
-        SELECT station, 
-               COUNT(DISTINCT doc_id) as document_count,
-               COUNT(*) as total_records
-        FROM women_admission 
-        WHERE station IS NOT NULL 
-        GROUP BY station 
-        ORDER BY total_records DESC 
-        LIMIT 20
-      ")
-      
-      p <- ggplot(data, aes(x = reorder(station, total_records), y = total_records)) +
-        geom_bar(stat = "identity", fill = "steelblue") +
-        coord_flip() +
-        theme_minimal() +
-        labs(title = "Station Activity Levels (Top 20)", x = "Station", y = "Total Records")
-    } else {
-      # Document Coverage
-      data <- dbGetQuery(conn(), "
-        SELECT d.doc_id, d.source_name, COUNT(sr.report_id) as report_count
-        FROM documents d
-        LEFT JOIN station_reports sr ON d.doc_id = sr.doc_id
-        GROUP BY d.doc_id, d.source_name
-        ORDER BY report_count DESC
-      ")
-      
-      p <- ggplot(data, aes(x = reorder(doc_id, report_count), y = report_count)) +
-        geom_bar(stat = "identity", fill = "darkgreen") +
-        coord_flip() +
-        theme_minimal() +
-        labs(title = "Document Coverage by Station Reports", x = "Document ID", y = "Number of Station Reports")
-    }
-    
-    ggplotly(p)
-  })
-  
   # Export functionality
   observeEvent(input$export_data, {
     table_name <- input$export_table
@@ -655,7 +606,10 @@ server <- function(input, output, session) {
     dbGetQuery(conn(), "SELECT * FROM women_admission")
   })
   ops_df <- reactive({
-    dbGetQuery(conn(), "SELECT * FROM hospital_operations")
+    dbGetQuery(conn(), "SELECT rowid AS __rowid__, * FROM hospital_operations")
+  })
+  notes_df <- reactive({
+    dbGetQuery(conn(), "SELECT hid, ops_inspection_regularity, ops_unlicensed_control_notes, ops_committee_activity_notes, remarks FROM hospital_notes")
   })
   troops_df <- reactive({
     dbGetQuery(conn(), "SELECT * FROM troops")
@@ -663,6 +617,315 @@ server <- function(input, output, session) {
   stations_df <- reactive({
     dbGetQuery(conn(), "SELECT * FROM stations")
   })
+
+  # ---------------------
+  # Hospital Notes helpers
+  # ---------------------
+  # Utility to trim and normalize whitespace
+  .trim_ws <- function(x) {
+    if (is.null(x)) return(x)
+    x <- gsub("\n|\r", " ", x)
+    x <- gsub("[\t ]+", " ", x)
+    x <- trimws(x)
+    x[x == ""] <- NA_character_
+    x
+  }
+  # Remove non-ASCII and special characters except a safe punctuation set
+  .strip_specials <- function(x) {
+    if (is.null(x)) return(x)
+    x0 <- as.character(x)
+    # transliterate to ASCII and drop unconvertible
+    x0 <- iconv(x0, to = "ASCII//TRANSLIT", sub = "")
+  # keep letters, numbers, whitespace, and some common punctuation
+  x0 <- gsub("[^A-Za-z0-9 \t\n\r.,;:!()'\"/?-]", "", x0)
+    # collapse whitespace and trim
+    x0 <- gsub("[\t ]+", " ", x0)
+    x0 <- trimws(x0)
+    x0[x0 == ""] <- NA_character_
+    x0
+  }
+  # Extract integer from mixed text (e.g., "3 MO" -> 3)
+  .parse_int <- function(x) {
+    if (is.null(x)) return(NA_integer_)
+    if (is.numeric(x)) return(as.integer(round(x)))
+    digits <- suppressWarnings(as.integer(gsub("[^0-9]", "", as.character(x))))
+    ifelse(is.na(digits) | is.nan(digits), NA_integer_, digits)
+  }
+  # Normalize inspection regularity to categories
+  .normalize_regularity <- function(x) {
+    # sanitize first to strip odd characters, then normalize
+    x0 <- tolower(.strip_specials(.trim_ws(as.character(x))))
+    dplyr::case_when(
+      is.na(x0) ~ NA_character_,
+      grepl("regular|weekly|monthly|quarterly|monthly|periodic", x0) & !grepl("irregular|infrequent|rare|sporadic", x0) ~ "Regular",
+      grepl("irregular|infrequent|rare|sporadic|occasional", x0) ~ "Irregular",
+      TRUE ~ "Other"
+    )
+  }
+
+  # Reactive cleaned Hospital Notes dataset
+  hospital_notes_df <- reactive({
+    # Load ops table
+    ops <- ops_df()
+    if (nrow(ops) == 0) return(ops)
+    cols <- dbGetQuery(conn(), "PRAGMA table_info(hospital_operations)")$name
+    want <- c(
+      "station","region","country","year",
+      "staff_medical_officers","staff_hospital_assistants","staff_matron",
+      "staff_coolies","staff_peons","staff_watermen",
+      "ops_inspection_regularity","ops_unlicensed_control_notes",
+      "ops_committee_activity_notes","remarks"
+    )
+    # Determine key column to enable DB updates later
+    key_col <- if ("unique_id" %in% names(ops)) "unique_id" else if ("hid" %in% names(ops)) "hid" else "__rowid__"
+    # Join in notes by HID to populate note fields
+    nts <- notes_df()
+    if (nrow(nts) > 0 && "hid" %in% names(ops)) {
+      ops <- dplyr::left_join(ops, nts, by = "hid", suffix = c("", "_notes"))
+      for (nm in c("ops_inspection_regularity","ops_unlicensed_control_notes","ops_committee_activity_notes","remarks")) {
+        src <- paste0(nm, "_notes")
+        if (src %in% names(ops)) {
+          if (!(nm %in% names(ops))) ops[[nm]] <- NA
+          ops[[nm]] <- dplyr::coalesce(ops[[src]], ops[[nm]])
+        }
+      }
+    }
+    # Ensure all desired columns exist (create NA if missing)
+    for (nm in setdiff(want, names(ops))) ops[[nm]] <- NA
+    keep_cols <- unique(c(key_col, want))
+    ops <- ops[, intersect(c(keep_cols, names(ops)), keep_cols), drop = FALSE]
+
+    ops %>%
+      dplyr::mutate(
+        staff_medical_officers = .parse_int(staff_medical_officers),
+        staff_hospital_assistants = .parse_int(staff_hospital_assistants),
+        staff_matron = .parse_int(staff_matron),
+        staff_coolies = .parse_int(staff_coolies),
+        staff_peons = .parse_int(staff_peons),
+        staff_watermen = .parse_int(staff_watermen),
+        ops_inspection_regularity = .normalize_regularity(ops_inspection_regularity),
+        ops_unlicensed_control_notes = .strip_specials(ops_unlicensed_control_notes),
+        ops_committee_activity_notes = .strip_specials(ops_committee_activity_notes),
+        remarks = .strip_specials(remarks),
+        staff_total = rowSums(cbind(
+          as.integer(coalesce(staff_medical_officers, 0)),
+          as.integer(coalesce(staff_hospital_assistants, 0)),
+          as.integer(coalesce(staff_matron, 0)),
+          as.integer(coalesce(staff_coolies, 0)),
+          as.integer(coalesce(staff_peons, 0)),
+          as.integer(coalesce(staff_watermen, 0))
+        ), na.rm = TRUE),
+        .key = .data[[key_col]],
+        .key_col = key_col
+      )
+  })
+
+  # ---------------------
+  # Temporal-Spatial Correlation Metrics
+  # ---------------------
+  correlation_data <- reactive({
+    w <- women_df()
+    t <- troops_df()
+    
+    if (nrow(w) == 0 || nrow(t) == 0) return(data.frame())
+    
+    # Aggregate women data by year, region, station
+    women_agg <- w %>%
+      dplyr::group_by(year, region, station, country) %>%
+      dplyr::summarise(
+        total_women_added = sum(women_added, na.rm = TRUE),
+        total_avg_registered = sum(avg_registered, na.rm = TRUE),
+        total_fined = sum(fined_count, na.rm = TRUE),
+        total_imprisoned = sum(imprisonment_count, na.rm = TRUE),
+        total_disease_women = sum(disease_primary_syphilis + disease_secondary_syphilis + 
+                                  disease_gonorrhoea + disease_leucorrhoea, na.rm = TRUE),
+        primary_syphilis_women = sum(disease_primary_syphilis, na.rm = TRUE),
+        secondary_syphilis_women = sum(disease_secondary_syphilis, na.rm = TRUE),
+        gonorrhoea_women = sum(disease_gonorrhoea, na.rm = TRUE),
+        leucorrhoea_women = sum(disease_leucorrhoea, na.rm = TRUE),
+        .groups = 'drop'
+      )
+    
+    # Aggregate troops data
+    troops_agg <- t %>%
+      dplyr::group_by(year, region, station, country) %>%
+      dplyr::summarise(
+        total_troop_strength = sum(avg_strength, na.rm = TRUE),
+        total_vd_admissions = sum(total_admissions, na.rm = TRUE),
+        primary_syphilis_troops = sum(primary_syphilis, na.rm = TRUE),
+        secondary_syphilis_troops = sum(secondary_syphilis, na.rm = TRUE),
+        gonorrhoea_troops = sum(gonorrhoea, na.rm = TRUE),
+        .groups = 'drop'
+      )
+    
+    # Merge women and troops
+    merged <- dplyr::full_join(women_agg, troops_agg, by = c("year", "region", "station", "country"))
+    
+    # Calculate normalized metrics
+    merged %>%
+      dplyr::mutate(
+        # Surveillance intensity (women per 1000 troops)
+        surveillance_index = ifelse(total_troop_strength > 0, 
+                                    (total_women_added + total_avg_registered) / total_troop_strength * 1000, 
+                                    NA_real_),
+        # Punishment rate (per 100 registered women)
+        punishment_rate = ifelse(total_avg_registered > 0,
+                                (total_fined + total_imprisoned * 2) / total_avg_registered * 100,
+                                NA_real_),
+        # Disease tracking rate (women)
+        disease_tracking_rate = ifelse(total_avg_registered > 0,
+                                       total_disease_women / total_avg_registered * 100,
+                                       NA_real_),
+        # Troop VD pressure (per 1000 troops)
+        troop_vd_pressure = ifelse(total_troop_strength > 0,
+                                   total_vd_admissions / total_troop_strength * 1000,
+                                   NA_real_),
+        # Disease rates
+        primary_syphilis_rate = ifelse(total_avg_registered > 0,
+                                       primary_syphilis_women / total_avg_registered * 100,
+                                       NA_real_),
+        secondary_syphilis_rate = ifelse(total_avg_registered > 0,
+                                         secondary_syphilis_women / total_avg_registered * 100,
+                                         NA_real_),
+        gonorrhoea_rate = ifelse(total_avg_registered > 0,
+                                gonorrhoea_women / total_avg_registered * 100,
+                                NA_real_),
+        troop_vd_rate = ifelse(total_troop_strength > 0,
+                              (primary_syphilis_troops + secondary_syphilis_troops + gonorrhoea_troops) / total_troop_strength * 100,
+                              NA_real_),
+        total_diseases = total_disease_women
+      ) %>%
+      dplyr::filter(!is.na(year))
+  })
+
+  # Dynamic filter controls for Hospital Notes
+  output$hn_station_select <- renderUI({
+    df <- hospital_notes_df()
+    stations <- sort(unique(na.omit(df$station)))
+    selectInput("hn_station", "Station:", choices = c("All", stations), selected = "All")
+  })
+  output$hn_year_range <- renderUI({
+    df <- hospital_notes_df()
+    yr <- sort(unique(na.omit(as.integer(df$year))))
+    if (length(yr) == 0) yr <- c(NA_integer_, NA_integer_)
+    sliderInput("hn_year", "Year Range:", min = min(yr, na.rm = TRUE), max = max(yr, na.rm = TRUE), value = c(min(yr, na.rm = TRUE), max(yr, na.rm = TRUE)), sep = "")
+  })
+
+  # Update Country choices based on data
+  observe({
+    df <- hospital_notes_df()
+    countries <- sort(unique(na.omit(df$country)))
+    updateSelectInput(session, "hn_country", choices = c("All", countries), selected = "All")
+  })
+
+  # Filtered dataset for display/export
+  hospital_notes_filtered <- reactive({
+    df <- hospital_notes_df()
+    if (nrow(df) == 0) return(df)
+    # Apply filters
+    if (!is.null(input$hn_station) && input$hn_station != "All") df <- df %>% dplyr::filter(.data$station == input$hn_station)
+    if (!is.null(input$hn_country) && input$hn_country != "All") df <- df %>% dplyr::filter(.data$country == input$hn_country)
+    if (!is.null(input$hn_year) && length(input$hn_year) == 2 && all(!is.na(input$hn_year))) {
+      df <- df %>% dplyr::filter(dplyr::between(as.integer(.data$year), input$hn_year[1], input$hn_year[2]))
+    }
+    if (!is.null(input$hn_search) && nzchar(input$hn_search)) {
+      kw <- tolower(input$hn_search)
+      keep <- grepl(kw, tolower(paste(df$ops_unlicensed_control_notes, df$ops_committee_activity_notes, df$remarks)), fixed = TRUE)
+      df <- df[keep, , drop = FALSE]
+    }
+    df
+  })
+
+  # Render table
+  output$hospital_notes_table <- DT::renderDataTable({
+    df <- hospital_notes_filtered()
+    validate(need(nrow(df) > 0, "No hospital notes data available for current filters"))
+    # Column order for display
+    display_cols <- c(
+      "station","region","country","year",
+      "staff_medical_officers","staff_hospital_assistants","staff_matron",
+      "staff_coolies","staff_peons","staff_watermen","staff_total",
+      "ops_inspection_regularity","ops_unlicensed_control_notes","ops_committee_activity_notes","remarks"
+    )
+    missing <- setdiff(display_cols, names(df))
+    for (m in missing) df[[m]] <- NA
+    df <- df[, display_cols]
+    DT::datatable(df, options = list(pageLength = 25, scrollX = TRUE, dom = 'Bfrtip', buttons = c('copy','csv','excel','print')), extensions = 'Buttons')
+  })
+
+  # Download cleaned notes
+  output$download_hospital_notes <- downloadHandler(
+    filename = function() paste0("hospital_notes_cleaned_", Sys.Date(), ".csv"),
+    content = function(file) {
+      df <- hospital_notes_filtered()
+      write.csv(df, file, row.names = FALSE)
+    }
+  )
+
+  # Persist cleaned notes back to the database (new)
+  observeEvent(input$hn_save_to_db, {
+    df <- hospital_notes_df()
+    if (nrow(df) == 0) {
+      output$hn_save_status <- renderText("No hospital operations data to save.")
+      return()
+    }
+    # Identify key column name used for updates
+    key_name <- unique(df$.key_col)[1]
+    if (is.null(key_name) || is.na(key_name)) key_name <- "__rowid__"
+    where_col <- if (identical(key_name, "__rowid__")) "rowid" else key_name
+
+    # Ensure destination columns exist
+    con <- conn()
+    add_col <- function(sql) { tryCatch({ DBI::dbExecute(con, sql) }, error = function(e) {}) }
+    add_col("ALTER TABLE hospital_operations ADD COLUMN ops_unlicensed_control_notes_clean TEXT")
+    add_col("ALTER TABLE hospital_operations ADD COLUMN ops_committee_activity_notes_clean TEXT")
+    add_col("ALTER TABLE hospital_operations ADD COLUMN remarks_clean TEXT")
+    add_col("ALTER TABLE hospital_operations ADD COLUMN ops_inspection_regularity_norm TEXT")
+
+    # Prepare update statement
+    sql <- paste0(
+      "UPDATE hospital_operations SET ",
+      "ops_unlicensed_control_notes_clean = ?, ",
+      "ops_committee_activity_notes_clean = ?, ",
+      "remarks_clean = ?, ",
+      "ops_inspection_regularity_norm = ? ",
+      "WHERE ", where_col, " = ?"
+    )
+
+    # Execute updates in a transaction
+    updated <- 0L
+    DBI::dbBegin(con)
+    err <- NULL
+    for (i in seq_len(nrow(df))) {
+      key_val <- df$.key[i]
+      if (is.na(key_val)) next
+      params <- list(
+        df$ops_unlicensed_control_notes[i],
+        df$ops_committee_activity_notes[i],
+        df$remarks[i],
+        df$ops_inspection_regularity[i],
+        key_val
+      )
+      tryCatch({
+        DBI::dbExecute(con, sql, params = params)
+        updated <- updated + 1L
+      }, error = function(e) {
+        err <<- e$message
+      })
+      if (!is.null(err)) break
+    }
+    if (is.null(err)) {
+      tryCatch(DBI::dbCommit(con), error = function(e) { err <<- e$message; DBI::dbRollback(con) })
+    } else {
+      DBI::dbRollback(con)
+    }
+    if (is.null(err)) {
+      output$hn_save_status <- renderText(paste0("Saved cleaned fields to database for ", updated, " rows using key column '", where_col, "'."))
+    } else {
+      output$hn_save_status <- renderText(paste0("Error during save: ", err))
+    }
+  })
+
 
   # Temporal
   output$med_temporal_women_added <- renderPlotly({
@@ -957,6 +1220,365 @@ server <- function(input, output, session) {
     leaflet(st2) %>% addTiles() %>%
       addCircleMarkers(~lon, ~lat, radius = 5, color = "#2c7fb8", fillOpacity = 0.7,
         popup = ~paste0("<b>", label_name, "</b><br>Region: ", region, "<br>Country: ", country))
+  })
+  
+  # ---------------------
+  # Temporal-Spatial Correlation Outputs
+  # ---------------------
+  output$correlation_dual_axis <- renderPlotly({
+    corr <- correlation_data()
+    validate(need(nrow(corr) > 0, "No correlation data available"))
+    
+    # Aggregate by year for dual-axis time series
+    yearly <- corr %>%
+      dplyr::group_by(year) %>%
+      dplyr::summarise(
+        avg_surveillance_index = mean(surveillance_index, na.rm = TRUE),
+        avg_troop_vd_pressure = mean(troop_vd_pressure, na.rm = TRUE),
+        .groups = 'drop'
+      ) %>%
+      dplyr::filter(!is.na(avg_surveillance_index) | !is.na(avg_troop_vd_pressure))
+    
+    validate(need(nrow(yearly) > 0, "No yearly aggregate data available"))
+    
+    # Create dual-axis plot
+    p <- plot_ly(yearly, x = ~year) %>%
+      add_trace(y = ~avg_surveillance_index, name = 'Surveillance Index (Women per 1000 Troops)',
+                type = 'scatter', mode = 'lines+markers', line = list(color = '#e74c3c', width = 2),
+                marker = list(size = 8, color = '#e74c3c'), yaxis = 'y') %>%
+      add_trace(y = ~avg_troop_vd_pressure, name = 'Troop VD Pressure (per 1000 Troops)',
+                type = 'scatter', mode = 'lines+markers', line = list(color = '#3498db', width = 2),
+                marker = list(size = 8, color = '#3498db'), yaxis = 'y2') %>%
+      layout(
+        title = list(text = 'Surveillance Intensity vs. Military VD Pressure (Dual-Axis)', font = list(size = 16)),
+        xaxis = list(title = 'Year'),
+        yaxis = list(title = 'Surveillance Index', titlefont = list(color = '#e74c3c'), tickfont = list(color = '#e74c3c')),
+        yaxis2 = list(title = 'Troop VD Pressure', overlaying = 'y', side = 'right',
+                      titlefont = list(color = '#3498db'), tickfont = list(color = '#3498db')),
+        hovermode = 'x unified',
+        shapes = list(
+          # Mark Act XIV period (1868)
+          list(type = 'line', x0 = 1868, x1 = 1868, y0 = 0, y1 = 1, yref = 'paper',
+               line = list(color = 'orange', width = 2, dash = 'dash')),
+          # Mark Act III period (1880)
+          list(type = 'line', x0 = 1880, x1 = 1880, y0 = 0, y1 = 1, yref = 'paper',
+               line = list(color = 'purple', width = 2, dash = 'dash'))
+        ),
+        annotations = list(
+          list(x = 1868, y = 1, xref = 'x', yref = 'paper', text = 'Act XIV (1868)',
+               showarrow = FALSE, xanchor = 'left', yanchor = 'bottom', font = list(color = 'orange', size = 10)),
+          list(x = 1880, y = 1, xref = 'x', yref = 'paper', text = 'Act III (1880)',
+               showarrow = FALSE, xanchor = 'left', yanchor = 'bottom', font = list(color = 'purple', size = 10))
+        )
+      )
+    p
+  })
+  
+  output$correlation_scatter <- renderPlotly({
+    corr <- correlation_data()
+    validate(need(nrow(corr) > 0, "No correlation data available"))
+    corr_clean <- corr %>% dplyr::filter(!is.na(surveillance_index), !is.na(troop_vd_pressure))
+    validate(need(nrow(corr_clean) > 0, "No data points with both metrics"))
+    
+    p <- plot_ly(corr_clean, x = ~troop_vd_pressure, y = ~surveillance_index, 
+                 text = ~paste0(station, " (", year, ")"), color = ~year, size = ~punishment_rate,
+                 type = 'scatter', mode = 'markers', colors = 'Viridis',
+                 marker = list(sizemode = 'diameter', sizeref = 0.5, line = list(width = 0.5, color = 'white'))) %>%
+      layout(title = 'Military VD Pressure vs. Surveillance Intensity',
+             xaxis = list(title = 'Troop VD Pressure (per 1000)'),
+             yaxis = list(title = 'Surveillance Index (Women per 1000 Troops)'),
+             hovermode = 'closest')
+    p
+  })
+  
+  output$correlation_heatmap <- renderPlotly({
+    corr <- correlation_data()
+    validate(need(nrow(corr) > 0, "No correlation data available"))
+    
+    # Station x Year heatmap
+    hm_data <- corr %>%
+      dplyr::filter(!is.na(surveillance_index)) %>%
+      dplyr::select(station, year, surveillance_index) %>%
+      tidyr::pivot_wider(names_from = year, values_from = surveillance_index, values_fill = NA)
+    
+    validate(need(nrow(hm_data) > 1, "Insufficient data for heatmap"))
+    
+    stations <- hm_data$station
+    hm_matrix <- as.matrix(hm_data[, -1])
+    rownames(hm_matrix) <- stations
+    
+    plot_ly(z = hm_matrix, x = colnames(hm_matrix), y = rownames(hm_matrix),
+            type = 'heatmap', colorscale = 'YlOrRd', showscale = TRUE) %>%
+      layout(title = 'Surveillance Intensity Heatmap (Station × Year)',
+             xaxis = list(title = 'Year'),
+             yaxis = list(title = 'Station', tickfont = list(size = 8)))
+  })
+  
+  output$correlation_metrics_table <- DT::renderDataTable({
+    corr <- correlation_data()
+    validate(need(nrow(corr) > 0, "No correlation data available"))
+    
+    summary_table <- corr %>%
+      dplyr::group_by(region) %>%
+      dplyr::summarise(
+        Stations = dplyr::n_distinct(station),
+        `Avg Surveillance Index` = round(mean(surveillance_index, na.rm = TRUE), 2),
+        `Avg Punishment Rate` = round(mean(punishment_rate, na.rm = TRUE), 2),
+        `Avg Troop VD Pressure` = round(mean(troop_vd_pressure, na.rm = TRUE), 2),
+        `Total Women Registered` = sum(total_avg_registered, na.rm = TRUE),
+        `Total Troops` = sum(total_troop_strength, na.rm = TRUE),
+        .groups = 'drop'
+      ) %>%
+      dplyr::arrange(desc(`Avg Surveillance Index`))
+    
+    DT::datatable(summary_table, options = list(pageLength = 10, scrollX = TRUE), rownames = FALSE)
+  })
+  
+  # ---------------------
+  # Animated Timeline Map Outputs
+  # ---------------------
+  # Initial map render
+  output$animated_timeline_map <- renderLeaflet({
+    leaflet() %>% 
+      addTiles() %>%
+      setView(lng = 78.9629, lat = 20.5937, zoom = 5) %>%  # Center on India
+      addLegend(
+        position = "bottomright",
+        colors = c('#d62728', '#ff7f0e', '#ffbb78', '#c7e9b4', '#cccccc'),
+        labels = c('High (>20%)', 'Medium (10-20%)', 'Low (5-10%)', 'Minimal (<5%)', 'No Data'),
+        title = "Punishment Rate",
+        opacity = 0.7
+      )
+  })
+  
+  # Update markers when year changes
+  observe({
+    st <- stations_df()
+    corr <- correlation_data()
+    
+    req(nrow(st) > 0, nrow(corr) > 0, input$timeline_year)
+    
+    # Detect lat/lon columns
+    lat_col <- 'latitude'; lon_col <- 'longitude'
+    if (all(c('lat','lon') %in% names(st))) { lat_col <- 'lat'; lon_col <- 'lon' }
+    if (all(c('lat','lng') %in% names(st))) { lat_col <- 'lat'; lon_col <- 'lng' }
+    
+    st2 <- st %>% 
+      dplyr::filter(!is.na(.data[[lat_col]]), !is.na(.data[[lon_col]])) %>%
+      dplyr::mutate(lat = as.numeric(.data[[lat_col]]), lon = as.numeric(.data[[lon_col]])) %>%
+      dplyr::filter(lat <= 90, lat >= -90, lon <= 180, lon >= -180)
+    
+    # Filter correlation data by selected year
+    year_sel <- input$timeline_year
+    corr_year <- corr %>% dplyr::filter(year == year_sel)
+    
+    # Ensure a common 'station' key exists in stations data
+    if (!"station" %in% names(st2) && "name" %in% names(st2)) {
+      st2 <- dplyr::rename(st2, station = name)
+    }
+    # Build robust join keys based on available columns
+    join_keys <- c("station" = "station")
+    if ("region" %in% names(st2) && "region" %in% names(corr_year)) join_keys <- c(join_keys, "region" = "region")
+    if ("country" %in% names(st2) && "country" %in% names(corr_year)) join_keys <- c(join_keys, "country" = "country")
+    # Join with stations
+    map_data <- st2 %>% dplyr::left_join(corr_year, by = join_keys)
+    
+    req(nrow(map_data) > 0)
+    
+    # Scale circle size by registered women
+    map_data <- map_data %>%
+      dplyr::mutate(
+        circle_size = sqrt(pmax(total_avg_registered, 0, na.rm = TRUE)) * 2,
+        circle_size = ifelse(is.na(circle_size) | circle_size == 0, 3, pmin(circle_size, 20)),
+        punishment_color = dplyr::case_when(
+          is.na(punishment_rate) ~ '#cccccc',
+          punishment_rate > 20 ~ '#d62728',
+          punishment_rate > 10 ~ '#ff7f0e',
+          punishment_rate > 5 ~ '#ffbb78',
+          TRUE ~ '#c7e9b4'
+        ),
+        popup_text = paste0(
+          "<b>", station, "</b><br>",
+          "Year: ", year_sel, "<br>",
+          "Region: ", ifelse(is.na(region), "Unknown", region), "<br>",
+          "Registered Women: ", ifelse(is.na(total_avg_registered), "No data", round(total_avg_registered, 0)), "<br>",
+          "Punishment Rate: ", ifelse(is.na(punishment_rate), "No data", paste0(round(punishment_rate, 1), "%")), "<br>",
+          "Surveillance Index: ", ifelse(is.na(surveillance_index), "No data", round(surveillance_index, 1))
+        )
+      )
+    
+    leafletProxy("animated_timeline_map", data = map_data) %>%
+      clearMarkers() %>%
+      addCircleMarkers(
+        ~lon, ~lat, 
+        radius = ~circle_size,
+        color = ~punishment_color,
+        fillOpacity = 0.7,
+        stroke = TRUE,
+        weight = 1,
+        popup = ~popup_text,
+        layerId = ~station
+      )
+  })
+  
+  output$timeline_year_metrics <- renderPlotly({
+    corr <- correlation_data()
+    validate(need(nrow(corr) > 0, "No correlation data available"))
+    
+    yearly_totals <- corr %>%
+      dplyr::group_by(year) %>%
+      dplyr::summarise(
+        total_registered = sum(total_avg_registered, na.rm = TRUE),
+        total_fined = sum(total_fined, na.rm = TRUE),
+        total_imprisoned = sum(total_imprisoned, na.rm = TRUE),
+        .groups = 'drop'
+      )
+    
+    validate(need(nrow(yearly_totals) > 0, "No yearly data"))
+    
+    p <- plot_ly(yearly_totals, x = ~year) %>%
+      add_trace(y = ~total_registered, name = 'Registered Women', type = 'bar', marker = list(color = '#3498db')) %>%
+      add_trace(y = ~total_fined, name = 'Fined', type = 'bar', marker = list(color = '#f39c12')) %>%
+      add_trace(y = ~total_imprisoned, name = 'Imprisoned', type = 'bar', marker = list(color = '#e74c3c')) %>%
+      layout(
+        title = 'Year-over-Year Surveillance and Punishment',
+        xaxis = list(title = 'Year'),
+        yaxis = list(title = 'Count'),
+        barmode = 'group'
+      )
+    p
+  })
+  
+  # ---------------------
+  # Disease Prevalence Map Outputs
+  # ---------------------
+  # Initial map render
+  output$disease_prevalence_map <- renderLeaflet({
+    leaflet() %>% 
+      addTiles() %>%
+      setView(lng = 78.9629, lat = 20.5937, zoom = 5)  # Center on India
+  })
+  
+  # Update markers when metric selector changes
+  observe({
+    st <- stations_df()
+    corr <- correlation_data()
+    
+    req(nrow(st) > 0, nrow(corr) > 0, input$disease_map_metric)
+    
+    # Detect lat/lon columns
+    lat_col <- 'latitude'; lon_col <- 'longitude'
+    if (all(c('lat','lon') %in% names(st))) { lat_col <- 'lat'; lon_col <- 'lon' }
+    if (all(c('lat','lng') %in% names(st))) { lat_col <- 'lat'; lon_col <- 'lng' }
+    
+    st2 <- st %>% 
+      dplyr::filter(!is.na(.data[[lat_col]]), !is.na(.data[[lon_col]])) %>%
+      dplyr::mutate(lat = as.numeric(.data[[lat_col]]), lon = as.numeric(.data[[lon_col]])) %>%
+      dplyr::filter(lat <= 90, lat >= -90, lon <= 180, lon >= -180)
+    
+    # Aggregate disease data by station (across all years)
+    disease_by_station <- corr %>%
+      dplyr::group_by(station, region, country) %>%
+      dplyr::summarise(
+        total_diseases = sum(total_diseases, na.rm = TRUE),
+        primary_syphilis_rate = mean(primary_syphilis_rate, na.rm = TRUE),
+        secondary_syphilis_rate = mean(secondary_syphilis_rate, na.rm = TRUE),
+        gonorrhoea_rate = mean(gonorrhoea_rate, na.rm = TRUE),
+        troop_vd_rate = mean(troop_vd_rate, na.rm = TRUE),
+        .groups = 'drop'
+      )
+    
+    # Ensure a common 'station' key exists in stations data
+    if (!"station" %in% names(st2) && "name" %in% names(st2)) {
+      st2 <- dplyr::rename(st2, station = name)
+    }
+    # Build robust join keys based on available columns
+    join_keys <- c("station" = "station")
+    if ("region" %in% names(st2) && "region" %in% names(disease_by_station)) join_keys <- c(join_keys, "region" = "region")
+    if ("country" %in% names(st2) && "country" %in% names(disease_by_station)) join_keys <- c(join_keys, "country" = "country")
+    # Join with stations
+    map_data <- st2 %>% dplyr::left_join(disease_by_station, by = join_keys)
+    
+    req(nrow(map_data) > 0)
+    
+    # Color by selected metric
+    metric <- input$disease_map_metric
+    
+    map_data <- map_data %>%
+      dplyr::mutate(
+        metric_value = .data[[metric]],
+        popup_text = paste0(
+          "<b>", station, "</b><br>",
+          "Region: ", ifelse(is.na(region), "Unknown", region), "<br>",
+          "Total Diseases: ", ifelse(is.na(total_diseases), "No data", round(total_diseases, 0)), "<br>",
+          "Primary Syphilis Rate: ", ifelse(is.na(primary_syphilis_rate), "No data", paste0(round(primary_syphilis_rate, 1), "%")), "<br>",
+          "Secondary Syphilis Rate: ", ifelse(is.na(secondary_syphilis_rate), "No data", paste0(round(secondary_syphilis_rate, 1), "%")), "<br>",
+          "Gonorrhoea Rate: ", ifelse(is.na(gonorrhoea_rate), "No data", paste0(round(gonorrhoea_rate, 1), "%")), "<br>",
+          "Troop VD Rate: ", ifelse(is.na(troop_vd_rate), "No data", paste0(round(troop_vd_rate, 1), "%"))
+        )
+      )
+    
+    # Create color palette
+    pal <- colorNumeric(palette = "YlOrRd", domain = map_data$metric_value, na.color = "#cccccc")
+    
+    leafletProxy("disease_prevalence_map", data = map_data) %>%
+      clearMarkers() %>%
+      clearControls() %>%
+      addCircleMarkers(
+        ~lon, ~lat, 
+        radius = 8,
+        color = ~pal(metric_value),
+        fillOpacity = 0.8,
+        stroke = TRUE,
+        weight = 1,
+        popup = ~popup_text,
+        layerId = ~station
+      ) %>%
+      addLegend(
+        position = "bottomright",
+        pal = pal,
+        values = ~metric_value,
+        title = "Disease Metric",
+        opacity = 0.8,
+        layerId = "disease_legend"
+      )
+  })
+  
+  output$disease_comparison_women <- renderPlotly({
+    corr <- correlation_data()
+    validate(need(nrow(corr) > 0, "No correlation data available"))
+    
+    disease_totals <- corr %>%
+      dplyr::summarise(
+        `Primary Syphilis` = sum(primary_syphilis_women, na.rm = TRUE),
+        `Secondary Syphilis` = sum(secondary_syphilis_women, na.rm = TRUE),
+        Gonorrhoea = sum(gonorrhoea_women, na.rm = TRUE),
+        Leucorrhoea = sum(leucorrhoea_women, na.rm = TRUE)
+      ) %>%
+      tidyr::pivot_longer(everything(), names_to = "Disease", values_to = "Cases")
+    
+    plot_ly(disease_totals, labels = ~Disease, values = ~Cases, type = 'pie',
+            textinfo = 'label+percent',
+            marker = list(colors = c('#e74c3c', '#c0392b', '#e67e22', '#f39c12'))) %>%
+      layout(title = 'Disease Distribution in Women')
+  })
+  
+  output$disease_comparison_troops <- renderPlotly({
+    corr <- correlation_data()
+    validate(need(nrow(corr) > 0, "No correlation data available"))
+    
+    disease_totals <- corr %>%
+      dplyr::summarise(
+        `Primary Syphilis` = sum(primary_syphilis_troops, na.rm = TRUE),
+        `Secondary Syphilis` = sum(secondary_syphilis_troops, na.rm = TRUE),
+        Gonorrhoea = sum(gonorrhoea_troops, na.rm = TRUE)
+      ) %>%
+      tidyr::pivot_longer(everything(), names_to = "Disease", values_to = "Cases")
+    
+    plot_ly(disease_totals, labels = ~Disease, values = ~Cases, type = 'pie',
+            textinfo = 'label+percent',
+            marker = list(colors = c('#3498db', '#2980b9', '#1abc9c'))) %>%
+      layout(title = 'VD Distribution in Troops')
   })
   
   observeEvent(input$export_query, {
