@@ -13,6 +13,12 @@ library(shinydashboard)
 library(leaflet)
 library(tidyr)
 
+# Ensure images directory exists and serve as /images
+if (!dir.exists("content/images")) {
+  dir.create("content/images", recursive = TRUE, showWarnings = FALSE)
+}
+shiny::addResourcePath("images", "content/images")
+
 # Database connection function
 connect_to_db <- function() {
   db_path <- "medical_lock_hospitals.db"
@@ -67,8 +73,21 @@ ui <- dashboardPage(
               "Each entry in this dataset reflects the bureaucratic structure of the colonial state: the staffing of hospitals, the geography of cantonments, and the regular counting of \"registered\" and \"unregistered\" women. Taken together, these numbers allow us to see how the colonial government converted everyday life into data, turning acts of care into mechanisms of surveillance."
             ),
             p(style = "font-size: 15px; line-height: 1.6;",
-              strong("Rather than treating these figures as neutral statistics, this project reads them as evidence of how medicine, morality, and governance became intertwined in the making of empire.")
+              "Rather than treating these figures as neutral statistics, this project reads them as evidence of how medicine, morality, and governance became intertwined in the making of empire."
             )
+          )
+        ),
+        br(),
+        fluidRow(
+          box(
+            title = "From the Archives", status = "primary", solidHeader = TRUE,
+            width = 12,
+            p(style = "font-size: 14px;",
+              "Selections from nineteenth-century reports and illustrations related to Lock Hospitals."),
+            fileInput("archive_image_upload", "Upload images (JPG/PNG/WebP)", multiple = TRUE,
+                      accept = c("image/png","image/jpeg","image/webp","image/gif")),
+            helpText("You can also place files directly in content/images/."),
+            uiOutput("overview_images")
           )
         ),
         br(),
@@ -92,18 +111,11 @@ ui <- dashboardPage(
             ),
             br(),
             fluidRow(
-              column(6,
+              column(12,
                 box(
                   title = "Data Quality Summary", status = "info", solidHeader = TRUE,
                   width = 12,
                   DT::dataTableOutput("quality_summary")
-                )
-              ),
-              column(6,
-                box(
-                  title = "Missing Data Overview", status = "warning", solidHeader = TRUE,
-                  width = 12,
-                  plotlyOutput("missing_data_plot")
                 )
               )
             )
@@ -310,6 +322,21 @@ ui <- dashboardPage(
                       column(6, plotlyOutput("disease_comparison_women")),
                       column(6, plotlyOutput("disease_comparison_troops"))
                     )
+                  ),
+                  tabPanel("Admissions by Region",
+                    br(),
+                    fluidRow(
+                      column(12,
+                        h4("Admissions over Time by Region (Women and Men)"),
+                        p("Compare yearly admissions across regions. Women: sum of recorded disease cases; Men: total VD admissions in troops."),
+                        selectizeInput("admissions_regions", "Regions:", choices = NULL, multiple = TRUE, options = list(plugins = list("remove_button")))
+                      )
+                    ),
+                    br(),
+                    fluidRow(
+                      column(6, plotlyOutput("admissions_women_by_region")),
+                      column(6, plotlyOutput("admissions_men_by_region"))
+                    )
                   )
                 )
               )
@@ -421,6 +448,57 @@ server <- function(input, output, session) {
     count <- dbGetQuery(conn(), "SELECT COUNT(*) as count FROM women_admission")$count
     valueBox(count, "Women Records", icon = icon("female"), color = "purple")
   })
+
+  # Reactive bump to re-render images after upload
+  archives_version <- reactiveVal(0)
+
+  # Handle image uploads (copy into content/images)
+  observeEvent(input$archive_image_upload, {
+    files <- input$archive_image_upload
+    req(files)
+    dest_dir <- "content/images"
+    if (!dir.exists(dest_dir)) dir.create(dest_dir, recursive = TRUE, showWarnings = FALSE)
+    mapply(function(src, nm) {
+      try(file.copy(src, file.path(dest_dir, nm), overwrite = TRUE), silent = TRUE)
+    }, files$datapath, files$name)
+    # Trigger refresh
+    archives_version(archives_version() + 1)
+  }, ignoreInit = TRUE)
+
+  # Overview Tab - Images (archives)
+  output$overview_images <- renderUI({
+    v <- archives_version()  # dependency to refresh after uploads
+    base_dir <- "content/images"
+    # Preferred filenames (drop-in if you place the images with these names)
+    preferred <- file.path(base_dir, c(
+      "nwp_1877_cover.jpg",
+      "british_burma_1875.jpg",
+      "lock_hospital_hyde_park.jpg"
+    ))
+    files <- preferred[file.exists(preferred)]
+    if (length(files) == 0 && dir.exists(base_dir)) {
+      files <- list.files(base_dir, pattern = "\\.(png|jpg|jpeg|webp|gif)$", ignore.case = TRUE, full.names = TRUE)
+    }
+    files <- head(files, 3)
+    if (length(files) == 0) {
+      return(tags$div(style = "color:#666;", "Add images to content/images/ to display them here."))
+    }
+    srcs <- sub("^content/images/?", "images/", files)
+    captions <- c(
+      "Lock Hospitals Report, North-Western Provinces and Oudh (1877)",
+      "Annual Report on Lock-Hospitals of British Burma (1875)",
+      "Lock Hospital, Hyde Park Corner (illustration)"
+    )
+    tags$div(
+      style = "display:flex; flex-wrap:wrap; gap:16px;",
+      lapply(seq_along(srcs), function(i) {
+        tags$div(style = "flex:1 1 300px; max-width: 100%;", 
+          tags$img(src = srcs[i], style = "width:100%; height:auto; max-height:360px; object-fit:contain; border:1px solid #ddd; border-radius:6px; box-shadow:0 1px 3px rgba(0,0,0,0.15);"),
+          tags$p(style = "margin-top:6px; font-size: 12px; color:#555;", captions[min(i, length(captions))])
+        )
+      })
+    )
+  })
   
   output$total_troop_records <- renderValueBox({
     count <- dbGetQuery(conn(), "SELECT COUNT(*) as count FROM troops")$count
@@ -455,38 +533,7 @@ server <- function(input, output, session) {
     quality_data
   }, options = list(pageLength = 6, dom = 't'))
   
-  # Missing Data Plot
-  output$missing_data_plot <- renderPlotly({
-    tables <- c("documents", "stations", "station_reports", "women_admission", "troops", "hospital_operations")
-    missing_data <- lapply(tables, function(t) {
-      total <- dbGetQuery(conn(), paste("SELECT COUNT(*) as count FROM", t))$count
-      if (t == "documents") {
-        complete <- dbGetQuery(conn(), paste("SELECT COUNT(*) as count FROM", t, "WHERE doc_id IS NOT NULL AND source_name IS NOT NULL"))$count
-      } else if (t == "stations") {
-        complete <- dbGetQuery(conn(), paste("SELECT COUNT(*) as count FROM", t, "WHERE name IS NOT NULL"))$count
-      } else {
-        cols <- dbGetQuery(conn(), paste0("PRAGMA table_info(", t, ")"))$name
-        if ("unique_id" %in% cols) {
-          complete <- dbGetQuery(conn(), paste("SELECT COUNT(*) as count FROM", t, "WHERE unique_id IS NOT NULL"))$count
-        } else if ("hid" %in% cols) {
-          complete <- dbGetQuery(conn(), paste("SELECT COUNT(*) as count FROM", t, "WHERE hid IS NOT NULL"))$count
-        } else {
-          complete <- 0
-        }
-      }
-      data.frame(Table = t, Missing_Percentage = ifelse(total > 0, round((total - complete) / total * 100, 1), 0))
-    }) %>% dplyr::bind_rows()
-
-    p <- ggplot(missing_data, aes(x = Table, y = Missing_Percentage, fill = Table)) +
-      geom_bar(stat = "identity") +
-      theme_minimal() +
-      theme(axis.text.x = element_text(angle = 45, hjust = 1)) +
-      labs(title = "Missing Data Percentage by Table", 
-           x = "Table", y = "Missing Data (%)") +
-      scale_fill_viridis_d()
-
-    ggplotly(p)
-  })
+  # (Removed) Missing Data Plot - intentionally removed as per request
   
   # Data Tables Tab
   output$data_table <- DT::renderDataTable({
@@ -616,6 +663,18 @@ server <- function(input, output, session) {
   })
   stations_df <- reactive({
     dbGetQuery(conn(), "SELECT * FROM stations")
+  })
+
+  # ---------------------
+  # Admissions by Region - controls
+  # ---------------------
+  observe({
+    # Populate region choices from both datasets
+    w <- women_df(); t <- troops_df()
+    regions <- sort(unique(na.omit(c(w$region, t$region))))
+    if (length(regions) > 0) {
+      updateSelectizeInput(session, "admissions_regions", choices = regions, selected = regions, server = TRUE)
+    }
   })
 
   # ---------------------
@@ -1332,6 +1391,67 @@ server <- function(input, output, session) {
       dplyr::arrange(desc(`Avg Surveillance Index`))
     
     DT::datatable(summary_table, options = list(pageLength = 10, scrollX = TRUE), rownames = FALSE)
+  })
+
+  # ---------------------
+  # Admissions by Region - Plots
+  # ---------------------
+  output$admissions_women_by_region <- renderPlotly({
+    w <- women_df()
+    validate(need(nrow(w) > 0, "No women data available"))
+
+    # Compute women's admissions as sum of disease cases recorded
+    w2 <- w %>%
+      dplyr::mutate(
+        year = as.integer(year),
+        women_admissions = rowSums(cbind(
+          suppressWarnings(as.numeric(disease_primary_syphilis)),
+          suppressWarnings(as.numeric(disease_secondary_syphilis)),
+          suppressWarnings(as.numeric(disease_gonorrhoea)),
+          suppressWarnings(as.numeric(disease_leucorrhoea))
+        ), na.rm = TRUE)
+      ) %>%
+      dplyr::filter(!is.na(year), !is.na(region)) %>%
+      dplyr::group_by(year, region) %>%
+      dplyr::summarise(total_women_adm = sum(women_admissions, na.rm = TRUE), .groups = 'drop')
+
+    # Filter by selected regions if provided
+    regs <- input$admissions_regions
+    if (!is.null(regs) && length(regs) > 0) w2 <- dplyr::filter(w2, region %in% regs)
+
+    validate(need(nrow(w2) > 0, "No data for selected regions"))
+
+    plot_ly(w2, x = ~year, y = ~total_women_adm, color = ~region, type = 'scatter', mode = 'lines+markers') %>%
+      layout(
+        title = 'Women Admissions by Region (per year)',
+        xaxis = list(title = 'Year'),
+        yaxis = list(title = 'Total Women Admissions'),
+        legend = list(orientation = 'h')
+      )
+  })
+
+  output$admissions_men_by_region <- renderPlotly({
+    t <- troops_df()
+    validate(need(nrow(t) > 0, "No troops data available"))
+
+    t2 <- t %>%
+      dplyr::mutate(year = as.integer(year)) %>%
+      dplyr::filter(!is.na(year), !is.na(region)) %>%
+      dplyr::group_by(year, region) %>%
+      dplyr::summarise(total_men_adm = sum(suppressWarnings(as.numeric(total_admissions)), na.rm = TRUE), .groups = 'drop')
+
+    regs <- input$admissions_regions
+    if (!is.null(regs) && length(regs) > 0) t2 <- dplyr::filter(t2, region %in% regs)
+
+    validate(need(nrow(t2) > 0, "No data for selected regions"))
+
+    plot_ly(t2, x = ~year, y = ~total_men_adm, color = ~region, type = 'scatter', mode = 'lines+markers') %>%
+      layout(
+        title = 'Men (Troops) Admissions by Region (per year)',
+        xaxis = list(title = 'Year'),
+        yaxis = list(title = 'Total Men Admissions (VD cases)'),
+        legend = list(orientation = 'h')
+      )
   })
   
   # ---------------------
