@@ -6,6 +6,25 @@ A comprehensive Shiny web application for exploring, cleaning, and analyzing his
 
 This application provides an interactive interface to work with the `medical_lock_hospitals.db` SQLite database, which contains historical data about medical lock hospitals from the late 19th century British India. The database includes information about women's admissions, troop data, hospital operations, and station reports.
 
+## Repository layout (cleaned)
+
+To keep the Explorer uncluttered, most maintenance scripts, logs, and one-off exports have been moved into subfolders. Only what you need to run the app stays at the root.
+
+- Root (what you need to run):
+   - `app.R` – main Shiny app
+   - `run_app.R` – helper launcher (optional)
+   - `medical_lock_hospitals.db` – database used by the app
+   - `README.md`, `content/` – documentation and images
+- Archived/maintenance items:
+   - `archive/exports/` – CSV exports generated previously
+   - `archive/logs/` – Shiny logs
+   - `archive/backups/app/` – older app files/backups
+   - `archive/scripts_geocode/`, `archive/scripts_migrations/` – data maintenance scripts
+   - `archive/python_tools/` – ingest/DB utilities
+   - `research/` – standalone analysis notebooks/scripts
+
+Nothing was deleted; files were only relocated.
+
 ## Features
 
 ### 📊 Data Overview Dashboard
@@ -198,14 +217,8 @@ All changes were scripted with backups to archive/backups/ and are reflected in 
    ```
 
 2. **Run the application**:
-   ```bash
-   ./run_app.sh
-   ```
-   
-   Or manually:
    ```r
-   library(shiny)
-   runApp("app.R")
+   source("run_app.R")
    ```
 
 3. **Access the app**: Open your web browser to `http://localhost:3838`
@@ -273,7 +286,7 @@ If you modify the database schema:
 
 **"Database file not found"**
 - Ensure `medical_lock_hospitals.db` is in the same directory as `app.R`
-- Run `python3 create_database.py` to create the database
+- If you need to rebuild the DB from raw sources, the helper scripts live under `archive/python_tools/` (e.g., `create_database.py`).
 
 **Package installation errors**
 - Update R to the latest version
