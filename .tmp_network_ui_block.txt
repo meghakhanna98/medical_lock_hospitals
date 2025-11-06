@@ -1,0 +1,15 @@
+        
+        # Network analysis of what was recorded for men vs women
+        fluidRow(
+          box(title = "Network: What’s Recorded About Men (Troops)", status = "primary", solidHeader = TRUE, width = 6,
+            p(style = "color:#7f8c8d;", "Each link width shows the percentage of troop records that contain a value for that field (filtered by the timeline above)."),
+            forceNetworkOutput("med_men_network", height = 520)
+          ),
+          box(title = "Network: What’s Recorded About Women", status = "primary", solidHeader = TRUE, width = 6,
+            p(style = "color:#7f8c8d;", "Each link width shows the percentage of women’s records that contain a value for that field (filtered by the timeline above)."),
+            forceNetworkOutput("med_women_network", height = 520)
+          )
+        ),
+
+        fluidRow(
+          box(title = "Admissions by Region (Comparative)", status = "warning", solidHeader = TRUE, width = 12,

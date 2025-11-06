@@ -155,7 +155,7 @@ ui <- dashboardPage(
             ),
             br(),
             div(class = "viz-container",
-              h4("Terminology in Lock Hospital Reports", style = "margin-bottom: 16px; color: #2c3e50;"),
+              h3("Terminology in Lock Hospital Reports", style = "margin-bottom: 20px; color: #2c3e50; font-size: 24px; font-weight: 600;"),
               uiOutput("story_terms_viz")
             )
           )
@@ -313,14 +313,6 @@ ui <- dashboardPage(
         ),
         
         fluidRow(
-          box(title = "Surveillance Intensity Heatmap", status = "primary", solidHeader = TRUE, width = 12,
-            p(style = "color: #7f8c8d; font-size: 1.05em;", 
-              "Station×Year heatmap reveals where and when surveillance became routinized. 'Hot' stations are sites of sustained administrative coercion."),
-            plotlyOutput("correlation_heatmap", height = 600)
-          )
-        ),
-        
-        fluidRow(
           box(title = "Surveillance Index Over Time", status = "primary", solidHeader = TRUE, width = 12,
             p(style = "color: #7f8c8d; font-size: 1.05em;", 
               "Dual-axis plot shows co-movement between military VD pressure and women's surveillance intensity. Read as policy responsivity, not simple causation."),
@@ -348,21 +340,10 @@ ui <- dashboardPage(
         ),
         
         fluidRow(
-          box(title = "Punitive Measures Against Women", status = "danger", solidHeader = TRUE, width = 12,
-            p(style = "color: #7f8c8d; font-size: 1.05em;", 
-              "Fines and imprisonments reveal the coercive apparatus behind the surveillance system."),
-            fluidRow(
-              column(6, plotlyOutput("med_punitive_fines", height = 400)),
-              column(6, plotlyOutput("med_punitive_imprisonment", height = 400))
-            )
-          )
-        ),
-        
-        fluidRow(
           box(title = "The Surveillance Pipeline: Military Disease → Regulation → Women's Control", 
               status = "info", solidHeader = TRUE, width = 9,
             p(style = "color: #7f8c8d; font-size: 1.05em;", 
-              "Interactive Sankey flow showing how military VD cases led to Acts implementation, bringing women under surveillance and stricter control. Use the timeline to filter by Act period."),
+              "Interactive Sankey flow shown in percentages: share of military VD cases across Acts, each Act's share of women's admissions, and the percent of women registered out of those admitted. Use the timeline to filter by Act period."),
             fluidRow(
               column(12,
                 sliderInput("pipeline_years", "Timeline (Filter by Years):",
@@ -419,6 +400,18 @@ ui <- dashboardPage(
           )
         ),
         
+        # Network analysis of what was recorded for men vs women
+        fluidRow(
+          box(title = "Network: What’s Recorded About Men (Troops)", status = "primary", solidHeader = TRUE, width = 6,
+            p(style = "color:#7f8c8d;", "Each link width shows the percentage of troop records that contain a value for that field (filtered by the timeline above)."),
+            forceNetworkOutput("med_men_network", height = 520)
+          ),
+          box(title = "Network: What’s Recorded About Women", status = "primary", solidHeader = TRUE, width = 6,
+            p(style = "color:#7f8c8d;", "Each link width shows the percentage of women’s records that contain a value for that field (filtered by the timeline above)."),
+            forceNetworkOutput("med_women_network", height = 520)
+          )
+        ),
+
         fluidRow(
           box(title = "Admissions by Region (Comparative)", status = "warning", solidHeader = TRUE, width = 12,
             p(style = "color: #7f8c8d; font-size: 1.05em;", 
@@ -674,7 +667,7 @@ ui <- dashboardPage(
             title = "Data Export", status = "success", solidHeader = TRUE,
             width = 12,
             fluidRow(
-              column(6,
+              column(12,
                 selectInput("export_table", "Select Table to Export:",
                   choices = c("documents", "stations", "station_reports", 
                              "women_admission", "troops", "hospital_operations")
@@ -683,14 +676,6 @@ ui <- dashboardPage(
                   choices = c("CSV", "Excel", "JSON")
                 ),
                 actionButton("export_data", "Export Data", class = "btn-success")
-              ),
-              column(6,
-                h4("Custom Query Export"),
-                textAreaInput("custom_query", "Enter SQL Query:", 
-                  placeholder = "SELECT * FROM women_admission WHERE year > 1880",
-                  rows = 4
-                ),
-                actionButton("export_query", "Export Query Results", class = "btn-primary")
               )
             ),
             br(),
@@ -708,6 +693,30 @@ server <- function(input, output, session) {
   # Database connection
   conn <- reactive({
     connect_to_db()
+  })
+  
+  # Image Gallery Navigation
+  current_image_index <- reactiveVal(1)
+  
+  observeEvent(input$next_image, {
+    img_dir <- "content/images"
+    img_files <- list.files(img_dir, pattern = "\\.(jpg|jpeg|png|gif|webp)$", ignore.case = TRUE)
+    current <- current_image_index()
+    if (current < length(img_files)) {
+      current_image_index(current + 1)
+    }
+  })
+  
+  observeEvent(input$prev_image, {
+    current <- current_image_index()
+    if (current > 1) {
+      current_image_index(current - 1)
+    }
+  })
+  
+  # Make the current index available to the UI
+  observe({
+    updateQueryString(sprintf("?image=%d", current_image_index()))
   })
   
   # Close connection when app stops
@@ -813,8 +822,10 @@ server <- function(input, output, session) {
       dbGetQuery(conn(), paste("SELECT COUNT(*) as count FROM", t))$count
     })
     complete_records <- sapply(tables, function(t) {
-      if (t %in% c("women_admission", "troops", "hospital_operations")) {
+      if (t %in% c("women_admission", "troops")) {
         dbGetQuery(conn(), paste("SELECT COUNT(*) as count FROM", t, "WHERE doc_id IS NOT NULL AND source_name IS NOT NULL"))$count
+      } else if (t == "hospital_operations") {
+        dbGetQuery(conn(), paste("SELECT COUNT(*) as count FROM", t, "WHERE doc_id IS NOT NULL"))$count
       } else if (t == "stations") {
         dbGetQuery(conn(), paste("SELECT COUNT(*) as count FROM", t, "WHERE name IS NOT NULL"))$count
       } else {
@@ -1068,11 +1079,22 @@ server <- function(input, output, session) {
     } else if (table_name == "stations") {
       null_check <- dbGetQuery(conn(), paste("SELECT COUNT(*) as count FROM", table_name, "WHERE name IS NULL"))
       validation_results <- paste(validation_results, "Records with NULL name:", null_check$count, "\n")
+    } else if (table_name %in% c("women_admission", "troops")) {
+      null_check <- dbGetQuery(conn(), paste("SELECT COUNT(*) as count FROM", table_name, "WHERE doc_id IS NULL OR source_name IS NULL"))
+      validation_results <- paste(validation_results, "Records with NULL doc_id or source_name:", null_check$count, "\n")
+    } else if (table_name == "hospital_operations") {
+      null_check <- dbGetQuery(conn(), paste("SELECT COUNT(*) as count FROM", table_name, "WHERE doc_id IS NULL"))
+      validation_results <- paste(validation_results, "Records with NULL doc_id:", null_check$count, "\n")
     }
     
     # Check for empty strings
-    empty_check <- dbGetQuery(conn(), paste("SELECT COUNT(*) as count FROM", table_name, "WHERE doc_id = '' OR source_name = ''"))
-    validation_results <- paste(validation_results, "Records with empty strings:", empty_check$count, "\n")
+    if (table_name %in% c("documents", "women_admission", "troops")) {
+      empty_check <- dbGetQuery(conn(), paste("SELECT COUNT(*) as count FROM", table_name, "WHERE doc_id = '' OR source_name = ''"))
+      validation_results <- paste(validation_results, "Records with empty strings:", empty_check$count, "\n")
+    } else if (table_name == "hospital_operations") {
+      empty_check <- dbGetQuery(conn(), paste("SELECT COUNT(*) as count FROM", table_name, "WHERE doc_id = ''"))
+      validation_results <- paste(validation_results, "Records with empty doc_id:", empty_check$count, "\n")
+    }
     
     output$validation_results <- renderText(validation_results)
   })
@@ -1131,6 +1153,135 @@ server <- function(input, output, session) {
       jsonlite::write_json(data, filename)
       output$export_status <- renderText(paste("Data exported to", filename))
     }
+  })
+
+  # Network: information recorded about Men (Troops)
+  output$med_men_network <- renderForceNetwork({
+    # Get data and filter by timeline
+    year_range <- input$pipeline_years
+    if (is.null(year_range)) year_range <- c(1860, 1890)
+    df <- tryCatch(troops_df(), error = function(e) data.frame())
+    if (!is.data.frame(df) || nrow(df) == 0) {
+      return(forceNetwork(Links = data.frame(source=integer(), target=integer(), value=numeric()),
+                          Nodes = data.frame(name=character(), group=character()),
+                          Source = "source", Target = "target", NodeID = "name", Group = "group"))
+    }
+    df <- df %>% dplyr::filter(year >= year_range[1], year <= year_range[2])
+    validate(need(nrow(df) > 0, "No troop records in selected years"))
+
+    # Helper to compute non-empty coverage
+    non_empty <- function(x) {
+      if (is.numeric(x)) { !is.na(x) } else { !is.na(x) & nzchar(as.character(x)) }
+    }
+
+    # Variable categories mapping
+    var_map <- list(
+      list(cat = "Strength", cols = c("avg_strength")),
+      list(cat = "Admissions", cols = c("total_admissions")),
+      list(cat = "Disease", cols = c("primary_syphilis","secondary_syphilis","gonorrhoea","orchitis_gonorrhoea","phimosis","warts")),
+      list(cat = "Contraction", cols = c("contracted_at_station","contracted_elsewhere")),
+      list(cat = "Ratios", cols = c("ratio_per_1000")),
+      list(cat = "Regiments", cols = c("Regiments")),
+      list(cat = "Occupation", cols = c("period_of_occupation"))
+    )
+
+    pretty_label <- function(x) {
+      x <- gsub("_", " ", x)
+      x <- gsub("ratio per 1000", "Ratio per 1000", x, ignore.case = TRUE)
+      tools::toTitleCase(x)
+    }
+
+    # Build nodes and links
+  nodes <- data.frame(name = "Men (Troops)", group = "Entity", stringsAsFactors = FALSE)
+  links <- data.frame(source = integer(0), target = integer(0), value = numeric(0), stringsAsFactors = FALSE)
+
+    idx <- 1
+    for (grp in var_map) {
+      for (col in grp$cols) {
+        if (col %in% names(df)) {
+          cov <- round(100 * mean(non_empty(df[[col]]), na.rm = TRUE), 1)
+          label <- pretty_label(col)
+          nodes <- rbind(nodes, data.frame(name = label, group = grp$cat, stringsAsFactors = FALSE))
+          links <- rbind(links, data.frame(source = 0, target = idx, value = ifelse(is.finite(cov), max(cov, 0.1), 0.1), stringsAsFactors = FALSE))
+          idx <- idx + 1
+        }
+      }
+    }
+
+    colourScale <- JS(
+      "d3.scaleOrdinal()\n        .domain(['Entity','Strength','Admissions','Disease','Contraction','Ratios','Regiments','Occupation'])\n        .range(['#34495e','#27ae60','#2980b9','#e74c3c','#f39c12','#8e44ad','#16a085','#7f8c8d'])"
+    )
+
+    forceNetwork(
+      Links = links, Nodes = nodes,
+      Source = "source", Target = "target",
+      NodeID = "name", Group = "group",
+      Value = "value", opacity = 0.95, zoom = TRUE,
+      linkDistance = 120, charge = -380,
+      legend = FALSE, fontSize = 12,
+      colourScale = colourScale,
+      opacityNoHover = 0.2,
+      linkColour = "#95a5a6"
+    )
+  })
+
+  # Network: information recorded about Women
+  output$med_women_network <- renderForceNetwork({
+    year_range <- input$pipeline_years
+    if (is.null(year_range)) year_range <- c(1860, 1890)
+    df <- tryCatch(women_df(), error = function(e) data.frame())
+    if (!is.data.frame(df) || nrow(df) == 0) {
+      return(forceNetwork(Links = data.frame(source=integer(), target=integer(), value=numeric()),
+                          Nodes = data.frame(name=character(), group=character()),
+                          Source = "source", Target = "target", NodeID = "name", Group = "group"))
+    }
+    df <- df %>% dplyr::filter(year >= year_range[1], year <= year_range[2])
+    validate(need(nrow(df) > 0, "No women records in selected years"))
+
+    non_empty <- function(x) {
+      if (is.numeric(x)) { !is.na(x) } else { !is.na(x) & nzchar(as.character(x)) }
+    }
+
+    var_map <- list(
+      list(cat = "Register", cols = c("women_start_register","women_added","women_removed","women_end_register","avg_registered")),
+      list(cat = "Compliance/Discipline", cols = c("non_attendance_cases","fined_count","imprisonment_count")),
+      list(cat = "Disease", cols = c("disease_primary_syphilis","disease_secondary_syphilis","disease_gonorrhoea","disease_leucorrhoea")),
+      list(cat = "Outcomes", cols = c("discharges","deaths","Total")),
+      list(cat = "Notes", cols = c("side_notes"))
+    )
+
+    pretty_label <- function(x) tools::toTitleCase(gsub("_", " ", x))
+
+  nodes <- data.frame(name = "Women", group = "Entity", stringsAsFactors = FALSE)
+  links <- data.frame(source = integer(0), target = integer(0), value = numeric(0), stringsAsFactors = FALSE)
+    idx <- 1
+    for (grp in var_map) {
+      for (col in grp$cols) {
+        if (col %in% names(df)) {
+          cov <- round(100 * mean(non_empty(df[[col]]), na.rm = TRUE), 1)
+          label <- pretty_label(col)
+          nodes <- rbind(nodes, data.frame(name = label, group = grp$cat, stringsAsFactors = FALSE))
+          links <- rbind(links, data.frame(source = 0, target = idx, value = ifelse(is.finite(cov), max(cov, 0.1), 0.1), stringsAsFactors = FALSE))
+          idx <- idx + 1
+        }
+      }
+    }
+
+    colourScale <- JS(
+      "d3.scaleOrdinal()\n        .domain(['Entity','Register','Compliance/Discipline','Disease','Outcomes','Notes'])\n        .range(['#34495e','#27ae60','#f39c12','#e74c3c','#2980b9','#8e44ad'])"
+    )
+
+    forceNetwork(
+      Links = links, Nodes = nodes,
+      Source = "source", Target = "target",
+      NodeID = "name", Group = "group",
+      Value = "value", opacity = 0.95, zoom = TRUE,
+      linkDistance = 120, charge = -380,
+      legend = FALSE, fontSize = 12,
+      colourScale = colourScale,
+      opacityNoHover = 0.2,
+      linkColour = "#95a5a6"
+    )
   })
 
   # =====================
@@ -1584,7 +1735,7 @@ server <- function(input, output, session) {
         tryCatch({
           df <- story_terms_counts()
           if (nrow(df) == 0) df <- data.frame(term = c('no','terms','found'), freq = c(3,2,1))
-          wc2_fn(data.frame(word = df$term, freq = df$freq), size = 1.4)
+          wc2_fn(data.frame(word = df$term, freq = df$freq), size = 2.2)
         }, error = function(e) {
           NULL
         })
@@ -1596,6 +1747,91 @@ server <- function(input, output, session) {
     df <- story_terms_counts() %>% dplyr::arrange(dplyr::desc(freq))
     plot_ly(df, x = ~freq, y = ~reorder(term, freq), type = 'bar', orientation = 'h', marker = list(color = '#6c5ce7')) %>%
       layout(title = 'Terminology Mentions', xaxis = list(title = 'Count'), yaxis = list(title = 'Term'))
+  })
+
+  # Archive Images Gallery with Navigation
+  output$overview_images <- renderUI({
+    img_dir <- "content/images"
+    if (!dir.exists(img_dir)) {
+      return(p("No images directory found. Create 'content/images/' to add archive materials.", 
+               style = "color: #95a5a6; font-style: italic;"))
+    }
+    
+    # Get all image files
+    img_files <- list.files(img_dir, pattern = "\\.(jpg|jpeg|png|gif|webp)$", 
+                           ignore.case = TRUE, full.names = FALSE)
+    
+    if (length(img_files) == 0) {
+      return(p("No images found. Upload images or place them in 'content/images/'.", 
+               style = "color: #95a5a6; font-style: italic;"))
+    }
+    
+    # Current image index (use input$current_image_index or default to 1)
+    current_idx <- isolate(input$current_image_index %||% 1)
+    if (current_idx > length(img_files)) current_idx <- 1
+    
+    # Current image
+    current_img <- img_files[current_idx]
+    img_path <- file.path(img_dir, current_img)
+    
+    # Image descriptions
+    descriptions <- list(
+      "act_xxvi_1868_lock_hospitals" = "Act No. XXVI of 1868: Legislation enabling municipalities to provide for Lock-Hospitals. This act expanded the state's power to establish and maintain lock hospitals for the prevention of contagious venereal disease.",
+      "lock_hospitals_receipts_1873" = "Statement No. III showing the receipts and expenditure on account of Lock Hospitals during the year 1873, documenting the financial administration of the surveillance system across different stations.",
+      "bassein_hospital_records_1875" = "Amended Annual Statement from the Lock-hospital at Bassein (1875) showing detailed records of registered women, diseases diagnosed, and monthly statistics - a stark example of how women's bodies were transformed into administrative data.",
+      "lock_hospital_buildings" = "Architectural renderings of Lock Hospital buildings, showing the physical infrastructure of medical surveillance. These institutions combined medical care with mechanisms of control and containment."
+    )
+    
+    img_name <- gsub("\\.(jpg|jpeg|png|gif|webp)$", "", current_img, ignore.case = TRUE)
+    img_description <- descriptions[[img_name]] %||% img_name
+    
+    # Create navigation UI
+    div(
+      style = "max-width: 800px; margin: 0 auto; text-align: center;",
+      # Image counter
+      div(
+        style = "margin-bottom: 15px; font-size: 14px; color: #7f8c8d;",
+        sprintf("Image %d of %d", current_idx, length(img_files))
+      ),
+      # Image container
+      div(
+        style = "position: relative; margin: 20px 0; background: #fff; padding: 20px; border-radius: 8px; box-shadow: 0 2px 8px rgba(0,0,0,0.1);",
+        # Navigation buttons
+        div(
+          style = "position: absolute; left: 10px; top: 50%; transform: translateY(-50%); z-index: 2;",
+          if (current_idx > 1) 
+            actionButton(
+              inputId = "prev_image",
+              label = HTML("&#10094;"),
+              style = "background: rgba(0,0,0,0.6); color: white; border: none; border-radius: 50%; width: 40px; height: 40px;"
+            )
+        ),
+        div(
+          style = "position: absolute; right: 10px; top: 50%; transform: translateY(-50%); z-index: 2;",
+          if (current_idx < length(img_files))
+            actionButton(
+              inputId = "next_image",
+              label = HTML("&#10095;"),
+              style = "background: rgba(0,0,0,0.6); color: white; border: none; border-radius: 50%; width: 40px; height: 40px;"
+            )
+        ),
+        # Main image
+        tags$img(
+          src = img_path,
+          style = "max-width: 100%; height: auto; border-radius: 4px;",
+          onclick = sprintf("window.open('%s', '_blank')", img_path),
+          alt = img_name
+        )
+      ),
+      # Image caption with description
+      div(
+        style = "margin-top: 15px; padding: 20px; background: #f8f9fa; border-radius: 4px;",
+        h4(tools::toTitleCase(gsub("_", " ", img_name)), 
+           style = "margin: 0 0 10px 0; color: #2c3e50; font-size: 18px; font-weight: 600;"),
+        p(img_description,
+          style = "margin: 0; color: #34495e; font-size: 14px; line-height: 1.6;")
+      )
+    )
   })
 
   # ---------------------
@@ -2058,38 +2294,6 @@ server <- function(input, output, session) {
   })
 
   # Punitive
-  output$med_punitive_fines <- renderPlotly({
-    w <- women_df()
-    validate(need(nrow(w) > 0, "No women_admission data found"))
-    yearly <- w %>% dplyr::group_by(year) %>% dplyr::summarise(fined_count = sum(fined_count, na.rm = TRUE), .groups = 'drop') %>% dplyr::arrange(year)
-    p <- ggplot(yearly, aes(year, fined_count)) + geom_line(color = "#e74c3c") + geom_point(color = "#e74c3c") + theme_minimal() + labs(title = "Women Fined for Non-Compliance", x = "Year", y = "Number of Women Fined")
-    ggplotly(p)
-  })
-  output$med_punitive_imprisonment <- renderPlotly({
-    w <- women_df()
-    validate(need(nrow(w) > 0, "No women_admission data found"))
-    yearly <- w %>% dplyr::group_by(year) %>% dplyr::summarise(imprisonment_count = sum(imprisonment_count, na.rm = TRUE), .groups = 'drop') %>% dplyr::arrange(year)
-    p <- ggplot(yearly, aes(year, imprisonment_count)) + geom_line(color = "#c0392b") + geom_point(color = "#c0392b") + theme_minimal() + labs(title = "Women Imprisoned for Non-Compliance", x = "Year", y = "Number of Women Imprisoned")
-    ggplotly(p)
-  })
-  output$med_punitive_non_attendance <- renderPlotly({
-    w <- women_df()
-    validate(need(nrow(w) > 0, "No women_admission data found"))
-    yearly <- w %>% dplyr::group_by(year) %>% dplyr::summarise(non_attendance_cases = sum(non_attendance_cases, na.rm = TRUE), .groups = 'drop') %>% dplyr::arrange(year)
-    p <- ggplot(yearly, aes(year, non_attendance_cases)) + geom_line(color = "#f39c12") + geom_point(color = "#f39c12") + theme_minimal() + labs(title = "Non-Attendance Cases (Potential Resistance)", x = "Year", y = "Number of Non-Attendance Cases")
-    ggplotly(p)
-  })
-  output$med_punitive_totals <- renderPlotly({
-    w <- women_df()
-    validate(need(nrow(w) > 0, "No women_admission data found"))
-    totals <- data.frame(
-      Category = c("Fines", "Imprisonments", "Non-Attendance (Resistance)"),
-      Count = c(sum(w$fined_count, na.rm = TRUE), sum(w$imprisonment_count, na.rm = TRUE), sum(w$non_attendance_cases, na.rm = TRUE))
-    )
-    p <- ggplot(totals, aes(Category, Count, fill = Category)) + geom_col(alpha = 0.85) + theme_minimal() + theme(legend.position = "none") + labs(title = "Total Punitive Actions & Resistance", y = "Count")
-    ggplotly(p)
-  })
-
   # Military-Medical: Interactive Surveillance Pipeline (Sankey diagram)
   output$med_surveillance_sankey <- renderSankeyNetwork({
     # Get filtered year range
@@ -2131,7 +2335,6 @@ server <- function(input, output, session) {
         military_vd = sum(military_vd, na.rm = TRUE),
         women_admitted = sum(women_admitted, na.rm = TRUE),
         women_registered = sum(women_registered, na.rm = TRUE),
-        punitive_actions = sum(punitive_actions, na.rm = TRUE),
         stations = n_distinct(station),
         .groups = 'drop'
       )
@@ -2146,8 +2349,7 @@ server <- function(input, output, session) {
         "Act III (1880)",              # 4
         "No Act",                      # 5
         "Women Admitted",              # 6
-        "Women Registered",            # 7
-        "Punitive Actions"             # 8
+        "Women Registered"             # 7
       ),
       stringsAsFactors = FALSE
     )
@@ -2155,18 +2357,23 @@ server <- function(input, output, session) {
     # Create links (flows) - collect as list then convert to df
     links_list <- list()
     
-    # Flow 1: Military VD → Acts (or No Act)
+    # Precompute totals for percentage calculations
+    total_military <- sum(agg$military_vd, na.rm = TRUE)
+    total_women_adm <- sum(agg$women_admitted, na.rm = TRUE)
+
+    # Flow 1: Military VD → Acts (or No Act), as percentage of total military VD cases
     if (nrow(agg) > 0) {
       for (i in seq_len(nrow(agg))) {
         act <- agg$act_name[i]
         val <- agg$military_vd[i]
-        if (!is.na(val) && val > 0) {
+        if (!is.na(val) && val > 0 && total_military > 0) {
           target_idx <- which(nodes$name == act) - 1  # 0-indexed
           if (length(target_idx) > 0) {
+            pct <- round(100 * val / total_military, 1)
             links_list[[length(links_list) + 1]] <- list(
               source = 0,
               target = target_idx,
-              value = val,
+              value = pct,
               group = act
             )
           }
@@ -2174,18 +2381,19 @@ server <- function(input, output, session) {
       }
     }
     
-    # Flow 2: Acts → Women Admitted
+    # Flow 2: Acts → Women Admitted, as percentage of total women admitted
     if (nrow(agg) > 0) {
       for (i in seq_len(nrow(agg))) {
         act <- agg$act_name[i]
         val <- agg$women_admitted[i]
-        if (!is.na(val) && val > 0) {
+        if (!is.na(val) && val > 0 && total_women_adm > 0) {
           source_idx <- which(nodes$name == act) - 1
           if (length(source_idx) > 0) {
+            pct <- round(100 * val / total_women_adm, 1)
             links_list[[length(links_list) + 1]] <- list(
               source = source_idx,
               target = 6,  # Women Admitted
-              value = val,
+              value = pct,
               group = act
             )
           }
@@ -2193,28 +2401,17 @@ server <- function(input, output, session) {
       }
     }
     
-    # Flow 3: Women Admitted → Women Registered
+    # Flow 3: Women Admitted → Women Registered, as percentage of women admitted
     total_admitted <- sum(agg$women_admitted, na.rm = TRUE)
     total_registered <- sum(agg$women_registered, na.rm = TRUE)
     if (!is.na(total_admitted) && !is.na(total_registered) && 
         total_admitted > 0 && total_registered > 0) {
+      pct_reg <- round(100 * total_registered / total_admitted, 1)
       links_list[[length(links_list) + 1]] <- list(
         source = 6,
         target = 7,
-        value = total_registered,
+        value = pct_reg,
         group = "surveillance"
-      )
-    }
-    
-    # Flow 4: Women Registered → Punitive Actions
-    total_punitive <- sum(agg$punitive_actions, na.rm = TRUE)
-    if (!is.na(total_registered) && !is.na(total_punitive) && 
-        total_registered > 0 && total_punitive > 0) {
-      links_list[[length(links_list) + 1]] <- list(
-        source = 7,
-        target = 8,
-        value = total_punitive,
-        group = "punishment"
       )
     }
     
@@ -2239,7 +2436,7 @@ server <- function(input, output, session) {
       Target = "target",
       Value = "value",
       NodeID = "name",
-      units = "cases",
+      units = "%",
       fontSize = 13,
       nodeWidth = 25,
       nodePadding = 15,
@@ -2250,8 +2447,8 @@ server <- function(input, output, session) {
       LinkGroup = "group",
       colourScale = JS("
         d3.scaleOrdinal()
-          .domain(['Act XXII (1864)', 'Act VI (1868)', 'Act XIV (1868)', 'Act III (1880)', 'No Act', 'surveillance', 'punishment'])
-          .range(['#e74c3c', '#f39c12', '#9b59b6', '#2c3e50', '#bdc3c7', '#3498db', '#c0392b'])
+          .domain(['Act XXII (1864)', 'Act VI (1868)', 'Act XIV (1868)', 'Act III (1880)', 'No Act', 'surveillance'])
+          .range(['#e74c3c', '#f39c12', '#9b59b6', '#2c3e50', '#bdc3c7', '#3498db'])
       ")
     )
   })
@@ -2638,29 +2835,6 @@ server <- function(input, output, session) {
              yaxis = list(title = 'Surveillance Index (Women per 1000 Troops)'),
              hovermode = 'closest')
     p
-  })
-  
-  output$correlation_heatmap <- renderPlotly({
-    corr <- correlation_data()
-    validate(need(nrow(corr) > 0, "No correlation data available"))
-    
-    # Station x Year heatmap
-    hm_data <- corr %>%
-      dplyr::filter(!is.na(surveillance_index)) %>%
-      dplyr::select(station, year, surveillance_index) %>%
-      tidyr::pivot_wider(names_from = year, values_from = surveillance_index, values_fill = NA)
-    
-    validate(need(nrow(hm_data) > 1, "Insufficient data for heatmap"))
-    
-    stations <- hm_data$station
-    hm_matrix <- as.matrix(hm_data[, -1])
-    rownames(hm_matrix) <- stations
-    
-    plot_ly(z = hm_matrix, x = colnames(hm_matrix), y = rownames(hm_matrix),
-            type = 'heatmap', colorscale = 'YlOrRd', showscale = TRUE) %>%
-      layout(title = 'Surveillance Intensity Heatmap (Station × Year)',
-             xaxis = list(title = 'Year'),
-             yaxis = list(title = 'Station', tickfont = list(size = 8)))
   })
   
   output$correlation_metrics_table <- DT::renderDataTable({
