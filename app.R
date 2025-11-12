@@ -14,6 +14,9 @@ library(leaflet)
 library(tidyr)
 library(stringr)
 library(networkD3)
+library(sf)  # For reading shapefiles
+library(rnaturalearth)  # For country boundaries
+library(rnaturalearthdata)  # Country boundary data
 ## Optional: Excel ingestion for DS_Dataset (used if available)
 # We'll use readxl lazily via requireNamespace in server to avoid hard dependency at load time.
 
@@ -22,6 +25,10 @@ if (!dir.exists("content/images")) {
   dir.create("content/images", recursive = TRUE, showWarnings = FALSE)
 }
 shiny::addResourcePath("images", "content/images")
+
+# Toggle to disable heavy analytics and long-running observers while debugging UI
+# Set to TRUE to enable Safe Mode (shows map/tables but skips heavy analyses)
+SAFE_MODE <- TRUE
 
 # Database connection function
 connect_to_db <- function() {
@@ -39,16 +46,9 @@ ui <- dashboardPage(
   dashboardSidebar(
     sidebarMenu(id = "sidebar",
       menuItem("Story", tabName = "story", icon = icon("book-open")),
+      menuItem("Interactive Map", tabName = "map", icon = icon("map")),
       menuItem("Data Tables", tabName = "tables", icon = icon("table")),
       menuItem("Data Cleaning", tabName = "cleaning", icon = icon("broom")),
-      menuItem("Analysis", icon = icon("chart-line"), startExpanded = FALSE,
-        menuSubItem("Q1: Medicalization", tabName = "q1_medicalization", icon = icon("microscope")),
-        menuSubItem("Q2: Gendered Treatment", tabName = "q2_gender", icon = icon("venus-mars")),
-        menuSubItem("Q3: Acts & Geography", tabName = "q3_acts", icon = icon("map-marked-alt")),
-        menuSubItem("Disease Analysis", tabName = "disease_analysis", icon = icon("virus")),
-        menuSubItem("Hospital Operations", tabName = "hospital_ops", icon = icon("hospital"))
-      ),
-      menuItem("Summary Statistics", tabName = "summary", icon = icon("list-alt")),
       menuItem("Hospital Notes", tabName = "hospital_notes", icon = icon("clipboard")),
       menuItem("Data Export", tabName = "export", icon = icon("download"))
     )
@@ -64,6 +64,9 @@ ui <- dashboardPage(
           border-radius: 8px;
           box-shadow: 0 2px 4px rgba(0,0,0,0.1);
         }
+        /* Hide Shiny busy overlay and modal backdrop to avoid dimming during long renders (temporary) */
+        .shiny-busy, .shiny-busy-indicator, .shiny-busy-overlay, .shiny-busy-container { display: none !important; visibility: hidden !important; }
+        .modal-backdrop { display: none !important; }
       "))
     ),
     
@@ -152,11 +155,6 @@ ui <- dashboardPage(
             div(class = "viz-container",
               h4("Data Quality Summary", style = "margin-bottom: 20px; color: #2c3e50;"),
               DT::dataTableOutput("quality_summary")
-            ),
-            br(),
-            div(class = "viz-container",
-              h3("Terminology in Lock Hospital Reports", style = "margin-bottom: 20px; color: #2c3e50; font-size: 24px; font-weight: 600;"),
-              uiOutput("story_terms_viz")
             )
           )
         ),
@@ -212,6 +210,75 @@ ui <- dashboardPage(
         )
       ),
       
+      # Interactive Map Tab
+      tabItem(tabName = "map",
+        fluidRow(
+          box(
+            title = "Lock Hospital Locations",
+            status = "primary",
+            solidHeader = TRUE,
+            width = 12,
+            height = "700px",
+            leafletOutput("map", height = "500px"),
+            absolutePanel(
+              id = "map_controls",
+              class = "panel panel-default",
+              fixed = TRUE,
+              draggable = TRUE,
+              top = 60,
+              left = "auto",
+              right = 20,
+              bottom = "auto",
+              width = 330,
+              height = "auto",
+              style = "padding: 15px; background: white; opacity: 0.95;",
+              
+              # Year range slider - select single year or range
+              sliderInput("year_slider", "Select Year(s):",
+                min = 1873, max = 1890,
+                value = c(1873, 1873),  # Start with single year (both values same)
+                step = 1,
+                sep = "",
+                dragRange = TRUE,  # Allow dragging the range
+                animate = animationOptions(interval = 1500)
+              ),
+              helpText("💡 Drag one handle for a single year, or both handles to select a range.", 
+                       style = "font-size: 10px; color: #7f8c8d; margin-top: -5px; margin-bottom: 10px;"),
+              
+              # Act checkboxes - filter which acts to display
+              checkboxGroupInput("acts", "Filter by Acts:",
+                choices = list(
+                  "Act XXII of 1864" = "Act XXII of 1864",
+                  "Act XII of 1864" = "Act XII of 1864",
+                  "Act XIV of 1868" = "Act XIV of 1868",
+                  "Act III of 1880" = "Act III of 1880",
+                  "Voluntary System" = "Voluntary System"
+                ),
+                selected = c("Act XXII of 1864", "Act XII of 1864", "Act XIV of 1868", "Act III of 1880", "Voluntary System")
+              ),
+              
+              hr(style = "margin: 15px 0;"),
+              
+              # Railway overlay toggle
+              checkboxInput("show_railways", "Show Railway Lines & Stations", value = TRUE),
+              
+              # Legend
+              htmlOutput("map_legend")
+            )
+          )
+        ),
+        # Timeline visualization
+        fluidRow(
+          box(
+            title = "Women Admissions Over Time",
+            status = "primary",
+            solidHeader = TRUE,
+            width = 12,
+            height = "400px",
+            plotlyOutput("women_timeline", height = "300px")
+          )
+        )
+      ),
       
       # Data Tables Tab
       tabItem(tabName = "tables",
@@ -689,11 +756,392 @@ ui <- dashboardPage(
 
 # Server
 server <- function(input, output, session) {
-  
-  # Database connection
-  conn <- reactive({
-    connect_to_db()
+  message('SHINY_SESSION_START token=', session$token, ' pid=', Sys.getpid())
+  session$onSessionEnded(function() {
+    message('SHINY_SESSION_END token=', session$token)
   })
+  # Respect SAFE_MODE toggle to avoid heavy analytics crashing the UI
+  safe_mode <- exists('SAFE_MODE') && isTRUE(SAFE_MODE)
+  if (safe_mode) {
+    message('SAFE_MODE: heavy analytics disabled; map and tables should load')
+    # Provide lightweight placeholders / short-circuit heavy reactives
+    correlation_data <- reactive({ data.frame() })
+    # Disabled heavy plotly outputs
+    output$correlation_dual_axis <- renderPlotly({ plot_ly() %>% layout(title = 'Disabled (safe mode)') })
+    output$correlation_scatter <- renderPlotly({ plot_ly() %>% layout(title = 'Disabled (safe mode)') })
+    output$correlation_metrics_table <- DT::renderDataTable({ DT::datatable(data.frame(Message = 'Disabled in safe mode')) })
+    output$med_surveillance_sankey <- renderSankeyNetwork({ NULL })
+    output$med_temporal_women_added <- renderPlotly({ plot_ly() %>% layout(title = 'Disabled (safe mode)') })
+    output$med_temporal_avg_registered <- renderPlotly({ plot_ly() %>% layout(title = 'Disabled (safe mode)') })
+    output$med_geo_women_added_by_region <- renderPlotly({ plot_ly() %>% layout(title = 'Disabled (safe mode)') })
+    output$med_geo_avg_registered_by_region <- renderPlotly({ plot_ly() %>% layout(title = 'Disabled (safe mode)') })
+    output$med_surveillance_sankey <- renderSankeyNetwork({ NULL })
+    output$med_acts_total <- renderPlotly({ plot_ly() %>% layout(title = 'Disabled (safe mode)') })
+    output$med_acts_timeline <- renderPlotly({ plot_ly() %>% layout(title = 'Disabled (safe mode)') })
+    output$med_acts_by_station <- DT::renderDataTable({ DT::datatable(data.frame(Message = 'Disabled in safe mode')) })
+  }
+  
+  # Database connection: open a single connection at session start and reuse it
+  con_obj <- connect_to_db()
+  conn <- reactive({
+    con_obj
+  })
+  
+  # ===== INTERACTIVE MAP FUNCTIONALITY =====
+  # Reactive data for map - joins stations, women admissions, and acts
+  map_data <- reactive({
+    # Handle both single year and year range
+    year_range <- input$year_slider
+    if (length(year_range) == 2) {
+      year_min <- year_range[1]
+      year_max <- year_range[2]
+    } else {
+      year_min <- year_max <- year_range[1]
+    }
+    
+    if (year_min == year_max) {
+      message(sprintf("Fetching map data for year: %d", year_min))
+    } else {
+      message(sprintf("Fetching map data for years: %d-%d", year_min, year_max))
+    }
+    
+    con <- conn()
+    if (!DBI::dbIsValid(con)) {
+      message("Database connection is not valid")
+      return(data.frame())
+    }
+    
+    # Get stations with coordinates
+    stations <- tryCatch({
+      dbGetQuery(con, "SELECT * FROM stations WHERE latitude IS NOT NULL AND longitude IS NOT NULL")
+    }, error = function(e) {
+      message("Error querying stations: ", e$message)
+      return(data.frame())
+    })
+    
+    message(sprintf("Found %d stations with coordinates", nrow(stations)))
+    
+    if (nrow(stations) == 0) {
+      return(data.frame())
+    }
+    
+    # Get women admission data for selected year(s)
+    women_data <- tryCatch({
+      dbGetQuery(con, sprintf("
+        SELECT station, 
+               SUM(women_start_register) as total_registered, 
+               SUM(women_added) as total_added,
+               SUM(women_removed) as total_removed
+        FROM women_admission 
+        WHERE year BETWEEN %d AND %d
+        GROUP BY station", year_min, year_max))
+    }, error = function(e) {
+      message("Error querying women_admission: ", e$message)
+      return(data.frame())
+    })
+    
+    message(sprintf("Found %d stations with women data for year(s) %d-%d", nrow(women_data), year_min, year_max))
+    
+    # Get hospital operations data for acts (use most recent act in range)
+    hospital_data <- tryCatch({
+      dbGetQuery(con, sprintf("
+        SELECT station, act
+        FROM hospital_operations
+        WHERE year BETWEEN %d AND %d
+        GROUP BY station
+        HAVING year = MAX(year)", year_min, year_max))
+    }, error = function(e) {
+      message("Error querying hospital_operations: ", e$message)
+      return(data.frame())
+    })
+    
+    message(sprintf("Found %d hospital operations records for year(s) %d-%d", nrow(hospital_data), year_min, year_max))
+    
+    # Join data
+    map_df <- stations %>%
+      dplyr::left_join(women_data, by = c("name" = "station")) %>%
+      dplyr::left_join(hospital_data, by = c("name" = "station")) %>%
+      dplyr::mutate(
+        total_registered = ifelse(is.na(total_registered), 0, total_registered),
+        total_added = ifelse(is.na(total_added), 0, total_added),
+        total_removed = ifelse(is.na(total_removed), 0, total_removed),
+        # Flag stations with no data
+        has_data = total_added > 0 | total_registered > 0 | total_removed > 0,
+        # Scale circles: small grey circles for no data, sized circles for data
+        radius = ifelse(has_data, pmax(5, sqrt(pmax(0, total_added)) * 3), 4)
+      )
+    
+    # Filter by selected acts if checkbox filters are active
+    # Keep stations with no act data (show as grey) but filter the ones with acts
+    if (!is.null(input$acts) && length(input$acts) > 0) {
+      map_df <- map_df %>% dplyr::filter(is.na(act) | act %in% input$acts)
+      message(sprintf("After act filter: %d stations remain", nrow(map_df)))
+    }
+    
+    message(sprintf("Returning %d stations for map display", nrow(map_df)))
+    map_df
+  })
+  
+  # Load railway shapefiles (once at startup)
+  railway_lines <- tryCatch({
+    st_read("data_raw/railway_lines.shp", quiet = TRUE)
+  }, error = function(e) {
+    message("Railway lines shapefile not found: ", e$message)
+    NULL
+  })
+  
+  railway_stations <- tryCatch({
+    st_read("data_raw/railway_stations_extended.shp", quiet = TRUE)
+  }, error = function(e) {
+    message("Railway stations shapefile not found: ", e$message)
+    NULL
+  })
+  
+  # Load British India boundary (modern India, Pakistan, Bangladesh, Myanmar borders as proxy)
+  india_boundary <- tryCatch({
+    # Get country boundaries for the Indian subcontinent
+    india <- ne_countries(scale = "medium", country = c("India", "Pakistan", "Bangladesh", "Myanmar"), returnclass = "sf")
+    # Ensure CRS is EPSG:4326 (WGS84)
+    st_transform(india, crs = 4326)
+  }, error = function(e) {
+    message("Could not load boundary data: ", e$message)
+    NULL
+  })
+  
+  # Initialize the base map
+  output$map <- renderLeaflet({
+    message("Initializing base map")
+    map <- leaflet() %>%
+      addTiles() %>%
+      setView(lng = 78.9629, lat = 20.5937, zoom = 5)
+    
+    # Add British India boundary if available
+    if (!is.null(india_boundary)) {
+      map <- map %>%
+        addPolygons(
+          data = india_boundary,
+          fillColor = "transparent",
+          fillOpacity = 0,
+          color = "#8B4513",  # Saddle brown
+          weight = 3,
+          opacity = 0.8,
+          dashArray = "5, 5",  # Dashed line
+          group = "boundary",
+          popup = ~name
+        )
+    }
+    
+    map
+  })
+  
+  # Update railway overlays when checkbox changes or year changes
+  observe({
+    req(input$show_railways, input$year_slider)
+    
+    if (input$show_railways && !is.null(railway_lines) && !is.null(railway_stations)) {
+      # Get the year range
+      year_range <- input$year_slider
+      max_year <- ifelse(length(year_range) == 2, year_range[2], year_range[1])
+      
+      # Filter railway lines to only show those opened by the selected year
+      railways_filtered <- railway_lines[railway_lines$Year <= max_year, ]
+      
+      message(sprintf("Adding %d railway lines (opened by year %d) to map", nrow(railways_filtered), max_year))
+      
+      leafletProxy("map") %>%
+        clearGroup("railways") %>%
+        clearGroup("railway_stations")
+      
+      # Only add railways if there are any to display
+      if (nrow(railways_filtered) > 0) {
+        leafletProxy("map") %>%
+          # Add railway lines (only those operational by selected year)
+          addPolylines(
+            data = railways_filtered,
+            color = "#000000",
+            weight = 4,
+            opacity = 0.9,
+            group = "railways",
+            popup = ~paste0(
+              "<b>", Section, "</b><br>",
+              "Railway: ", Railway, "<br>",
+              "Opened: ", Month, "/", Day, "/", Year, "<br>",
+              "Distance: ", Miles, " miles<br>",
+              start_name, " → ", end_name
+            ),
+            label = ~Section
+          ) %>%
+          # Add railway station markers
+          addCircleMarkers(
+            data = railway_stations,
+            radius = 5,
+            color = "#000000",
+            fillColor = "#ffeb3b",
+            fillOpacity = 0.9,
+            weight = 2,
+            group = "railway_stations",
+            popup = ~paste0(
+              "<b>Railway Station</b><br>",
+              "Historic: ", orig_name, "<br>",
+              "Modern: ", modern_nam
+            ),
+            label = ~orig_name
+          )
+      }
+    } else {
+      message("Removing railway layers from map")
+      leafletProxy("map") %>%
+        clearGroup("railways") %>%
+        clearGroup("railway_stations")
+    }
+  })
+  
+  # Update map markers when data or filters change
+  observe({
+    req(input$year_slider)
+    data <- map_data()
+    
+    if (nrow(data) == 0) {
+      message("No map data to display")
+      leafletProxy("map") %>%
+        clearMarkers() %>%
+        clearControls()
+      return()
+    }
+    
+    message(sprintf("Updating map with %d markers", nrow(data)))
+    
+    # Assign colors based on act type and data availability
+    data <- data %>%
+      dplyr::mutate(
+        marker_color = dplyr::case_when(
+          !has_data ~ "#95a5a6",                          # Grey for no women data
+          is.na(act) ~ "#34495e",                         # Dark grey for data but no act
+          act == "Act XXII of 1864" ~ "#e74c3c",          # Red
+          act == "Act XII of 1864" ~ "#c0392b",           # Dark red
+          act == "Act XIV of 1868" ~ "#3498db",           # Blue
+          act == "Act III of 1880" ~ "#9b59b6",           # Purple
+          act == "Voluntary System" ~ "#27ae60",          # Green
+          TRUE ~ "#95a5a6"                                # Default grey
+        ),
+        # Adjust opacity: lower for stations with no data
+        marker_opacity = ifelse(has_data, 0.8, 0.5)
+      )
+    
+    leafletProxy("map", data = data) %>%
+      clearGroup("lock_hospitals") %>%
+      addCircleMarkers(
+        lng = ~longitude,
+        lat = ~latitude,
+        radius = ~radius,
+        group = "lock_hospitals",
+        popup = ~paste0(
+          "<b>", name, "</b><br>",
+          "Region: ", region, "<br>",
+          ifelse(has_data, 
+            paste0(
+              "<b>Women Added to Register: ", total_added, "</b><br>",
+              "Total Registered: ", total_registered, "<br>",
+              "Removed: ", total_removed, "<br>"
+            ),
+            "<i style='color:#7f8c8d;'>No women admission data for this year</i><br>"
+          ),
+          "Act: ", ifelse(is.na(act), "None", act)
+        ),
+        fillColor = ~marker_color,
+        fillOpacity = ~marker_opacity,
+        color = "#ffffff",
+        weight = 1,
+        stroke = TRUE
+      )
+  })
+  
+  # Map legend
+  output$map_legend <- renderUI({
+    railway_legend <- if (!is.null(input$show_railways) && input$show_railways) {
+      '
+      <hr style="margin: 10px 0;">
+      <h4 style="margin-top: 10px; font-size: 13px;">Railway Infrastructure</h4>
+      <div style="margin-top: 5px; font-size: 11px; line-height: 1.8;">
+        <div style="border-bottom: 2px solid #2c3e50; width: 20px; display: inline-block; margin-right: 5px;"></div> Railway Lines (1853-1890)<br>
+        <i class="fa fa-circle" style="color: #34495e; font-size: 8px;"></i> Railway Stations
+      </div>'
+    } else {
+      ""
+    }
+    
+    HTML(paste0('
+      <div style="background: white; padding: 10px; border-radius: 4px;">
+        <h4 style="margin-top: 0; font-size: 13px;">Circle Size</h4>
+        <p style="font-size: 11px; margin: 5px 0;">Indicates <b>women added</b> to Lock Hospital registers</p>
+        <hr style="margin: 10px 0;">
+        <h4 style="margin-top: 10px; font-size: 13px;">Contagious Diseases Acts</h4>
+        <div style="margin-top: 5px; font-size: 11px; line-height: 1.8;">
+          <i class="fa fa-circle" style="color: #e74c3c;"></i> Act XXII of 1864<br>
+          <i class="fa fa-circle" style="color: #c0392b;"></i> Act XII of 1864<br>
+          <i class="fa fa-circle" style="color: #3498db;"></i> Act XIV of 1868<br>
+          <i class="fa fa-circle" style="color: #9b59b6;"></i> Act III of 1880<br>
+          <i class="fa fa-circle" style="color: #27ae60;"></i> Voluntary System<br>
+          <i class="fa fa-circle" style="color: #34495e;"></i> Has Data, No Act<br>
+          <i class="fa fa-circle" style="color: #95a5a6; opacity: 0.5;"></i> No Data Available
+        </div>
+        ', railway_legend, '
+      </div>
+    '))
+  })
+  
+  # Women admissions timeline
+  output$women_timeline <- renderPlotly({
+    con <- conn()
+    
+    yearly_data <- tryCatch({
+      dbGetQuery(con, "
+        SELECT year, 
+               SUM(women_start_register) as total_registered,
+               SUM(women_added) as new_admissions,
+               SUM(women_removed) as removed
+        FROM women_admission 
+        GROUP BY year
+        ORDER BY year
+      ")
+    }, error = function(e) {
+      message("Error fetching timeline data: ", e$message)
+      return(data.frame())
+    })
+    
+    if (nrow(yearly_data) == 0) {
+      plot_ly() %>%
+        layout(title = "No women admission data available")
+    } else {
+      plot_ly(yearly_data) %>%
+        add_trace(
+          x = ~year,
+          y = ~total_registered,
+          name = "Total Registered",
+          type = "scatter",
+          mode = "lines+markers",
+          line = list(color = "#e74c3c"),
+          marker = list(size = 8)
+        ) %>%
+        add_trace(
+          x = ~year,
+          y = ~new_admissions,
+          name = "New Admissions",
+          type = "scatter",
+          mode = "lines+markers",
+          line = list(color = "#3498db"),
+          marker = list(size = 8)
+        ) %>%
+        layout(
+          title = "Women Admissions Over Time",
+          xaxis = list(title = "Year"),
+          yaxis = list(title = "Number of Women"),
+          hovermode = "x unified",
+          legend = list(x = 0.1, y = 0.9)
+        )
+    }
+  })
+  # ===== END INTERACTIVE MAP FUNCTIONALITY =====
   
   # Image Gallery Navigation
   current_image_index <- reactiveVal(1)
@@ -721,10 +1169,7 @@ server <- function(input, output, session) {
   
   # Close connection when app stops
   onStop(function() {
-    # Safely disconnect without triggering reactive context errors
-    con_obj <- NULL
-    try({ con_obj <- isolate(conn()) }, silent = TRUE)
-    if (!is.null(con_obj)) try(DBI::dbDisconnect(con_obj), silent = TRUE)
+    try({ DBI::dbDisconnect(con_obj) }, silent = TRUE)
   })
   
   # Overview Tab - Value Boxes
@@ -853,21 +1298,53 @@ server <- function(input, output, session) {
   output$data_table <- DT::renderDataTable({
     # Add dependency on refresh trigger
     table_refresh()
-    
-    query <- paste("SELECT rowid, * FROM", input$table_select)
-    data <- dbGetQuery(conn(), query)
-    DT::datatable(data, 
-      editable = list(target = 'cell', disable = list(columns = 0)),  # Make cells editable except rowid
-      selection = 'single',  # Enable row selection for delete
-      options = list(
-        pageLength = 25,
-        scrollX = TRUE,
-        dom = 'Bfrtip',
-        buttons = c('copy', 'csv', 'excel', 'pdf', 'print')
-      ), 
-      extensions = 'Buttons',
-      rownames = FALSE
-    )
+    # Try to fetch rowid; some tables or views may not expose rowid, so fallback
+    query_rowid <- paste("SELECT rowid, * FROM", input$table_select)
+    data <- tryCatch({
+      d <- dbGetQuery(conn(), query_rowid)
+      # Mark that rowid was available
+      attr(d, 'rowid_available') <- TRUE
+      d
+    }, error = function(e) {
+      # Fallback: select all columns, create a synthetic rownum and mark table non-editable
+      dat <- tryCatch(dbGetQuery(conn(), paste("SELECT * FROM", input$table_select)), error = function(e2) {
+        # If even this fails, return empty data.frame
+        return(data.frame())
+      })
+      if (nrow(dat) > 0) dat$.__rownum__ <- seq_len(nrow(dat))
+      attr(dat, 'rowid_available') <- FALSE
+      dat
+    })
+    rowid_available <- isTRUE(attr(data, 'rowid_available'))
+
+    # Log debug info for table rendering
+    try({
+      message(sprintf('data_table render: table=%s rows=%d rowid_available=%s', input$table_select, nrow(data), as.character(rowid_available)))
+    }, silent = TRUE)
+
+    if (!rowid_available) {
+      # Non-editable fallback table
+      DT::datatable(data, 
+        editable = FALSE,
+        selection = 'single',
+        options = list(pageLength = 25, scrollX = TRUE, dom = 'Bfrtip', buttons = c('copy','csv','excel','print')), 
+        extensions = 'Buttons',
+        rownames = FALSE
+      )
+    } else {
+      DT::datatable(data, 
+        editable = list(target = 'cell', disable = list(columns = 0)),  # Make cells editable except rowid
+        selection = 'single',  # Enable row selection for delete
+        options = list(
+          pageLength = 25,
+          scrollX = TRUE,
+          dom = 'Bfrtip',
+          buttons = c('copy', 'csv', 'excel', 'pdf', 'print')
+        ), 
+        extensions = 'Buttons',
+        rownames = FALSE
+      )
+    }
   })
   
   # Handle cell edits in data_table
@@ -875,9 +1352,12 @@ server <- function(input, output, session) {
     info <- input$data_table_cell_edit
     req(info, input$table_select)
     
-    # Get current data
-    query <- paste("SELECT rowid, * FROM", input$table_select)
-    data <- dbGetQuery(conn(), query)
+    # Get current data (try rowid, otherwise abort with notification)
+    data <- tryCatch(dbGetQuery(conn(), paste("SELECT rowid, * FROM", input$table_select)), error = function(e) {
+      showNotification("This table is not editable (rowid not available).", type = 'warning', duration = 5)
+      return(NULL)
+    })
+    req(is.data.frame(data))
     
     # Extract edit info
     row_num <- info$row
@@ -917,6 +1397,8 @@ server <- function(input, output, session) {
   
   # Delete selected row
   observeEvent(input$delete_row_btn, {
+    # Only respond to a real user click (actionButton increments from 0)
+    req(isTRUE(!is.null(input$delete_row_btn)) && input$delete_row_btn > 0)
     req(input$data_table_rows_selected, input$table_select)
     
     # Get current data
@@ -939,6 +1421,8 @@ server <- function(input, output, session) {
   })
   
   observeEvent(input$confirm_delete, {
+    # guard to ensure this was triggered by a user
+    req(isTRUE(!is.null(input$confirm_delete)) && input$confirm_delete > 0)
     req(input$data_table_rows_selected, input$table_select)
     
     # Get current data
@@ -972,6 +1456,8 @@ server <- function(input, output, session) {
   
   # Add new row
   observeEvent(input$add_row_btn, {
+    # Only respond to user click
+    req(isTRUE(!is.null(input$add_row_btn)) && input$add_row_btn > 0)
     req(input$table_select)
     
     # Get table structure
@@ -1000,6 +1486,8 @@ server <- function(input, output, session) {
   })
   
   observeEvent(input$confirm_add, {
+    # Ensure this was triggered by user confirm button
+    req(isTRUE(!is.null(input$confirm_add)) && input$confirm_add > 0)
     req(input$table_select)
     
     # Get table structure
@@ -1842,6 +2330,18 @@ server <- function(input, output, session) {
     t <- troops_df()
     
     if (nrow(w) == 0 || nrow(t) == 0) return(data.frame())
+    # Defensive: if expected derived columns are missing, skip heavy analysis
+    required_w_cols <- c('avg_registered', 'women_added')
+    if (!all(required_w_cols %in% names(w))) {
+      message('correlation_data: missing required women columns; skipping correlation computation')
+      return(data.frame())
+    }
+    # Defensive: ensure troop columns required for correlation exist
+    required_t_cols <- c('avg_strength', 'total_admissions')
+    if (!all(required_t_cols %in% names(t))) {
+      message('correlation_data: missing required troop columns; skipping correlation computation')
+      return(data.frame())
+    }
     
     # Aggregate women data by year, region, station
     women_agg <- w %>%
@@ -2065,7 +2565,7 @@ server <- function(input, output, session) {
     # Column order for display
     display_cols <- c(
       "station","region","country","year",
-      "ops_inspection_regularity","ops_unlicensed_control_notes","ops_committee_activity_notes","remarks"
+      "ops_inspection_regularity","ops_unlicensed_control_notes","ops_committee_activity_notes","remarks" # nolint
     )
     missing <- setdiff(display_cols, names(df))
     for (m in missing) df[[m]] <- NA
@@ -2744,6 +3244,7 @@ server <- function(input, output, session) {
   # Stations Map
   output$stations_map <- renderLeaflet({
     st <- stations_df()
+    message('renderLeaflet: stations_map - stations rows = ', nrow(st))
     validate(need(nrow(st) > 0, "No stations data found"))
     # Try to detect lat/lon column names
     lat_col <- NA; lon_col <- NA
@@ -2763,6 +3264,7 @@ server <- function(input, output, session) {
       st2$label_name <- "Station"
     }
     validate(need(nrow(st2) > 0, "No valid geolocated stations to display"))
+    message('renderLeaflet: stations_map - geolocated rows = ', nrow(st2))
     leaflet(st2) %>% addTiles() %>%
       addCircleMarkers(~lon, ~lat, radius = 5, color = "#2c7fb8", fillOpacity = 0.7,
         popup = ~paste0("<b>", label_name, "</b><br>Region: ", region, "<br>Country: ", country))
