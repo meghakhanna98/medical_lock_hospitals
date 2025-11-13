@@ -20,6 +20,18 @@ library(rnaturalearthdata)  # Country boundary data
 ## Optional: Excel ingestion for DS_Dataset (used if available)
 # We'll use readxl lazily via requireNamespace in server to avoid hard dependency at load time.
 
+# Suppress R CMD check warnings for dplyr NSE variables
+utils::globalVariables(c(
+  "total_added", "total_removed", "total_registered", "has_data", "name", "pk", "type",
+  "year", "station_key", "station", "region", "country", "male_mentions", "female_mentions",
+  "total_mentions", "text_blob", "__sheet__", "ops_inspection_regularity",
+  "ops_unlicensed_control_notes", "ops_committee_activity_notes", "remarks", "freq",
+  "fined_count", "imprisonment_count", "disease_primary_syphilis", "disease_secondary_syphilis",
+  "disease_gonorrhoea", "disease_leucorrhoea", "marker_color", "marker_opacity", "radius",
+  "longitude", "latitude", "act", "avg_strength", "vd_primary_admissions", "vd_secondary_admissions",
+  "vd_other_admissions", "total_vd_cases", "doc_id", "hid", "sid", "Year", "Section"
+))
+
 # Ensure images directory exists and serve as /images
 if (!dir.exists("content/images")) {
   dir.create("content/images", recursive = TRUE, showWarnings = FALSE)
@@ -213,40 +225,37 @@ ui <- dashboardPage(
       # Interactive Map Tab
       tabItem(tabName = "map",
         fluidRow(
-          box(
-            title = "Lock Hospital Locations",
-            status = "primary",
-            solidHeader = TRUE,
-            width = 12,
-            height = "700px",
-            leafletOutput("map", height = "500px"),
-            absolutePanel(
-              id = "map_controls",
-              class = "panel panel-default",
-              fixed = TRUE,
-              draggable = TRUE,
-              top = 60,
-              left = "auto",
-              right = 20,
-              bottom = "auto",
-              width = 330,
-              height = "auto",
-              style = "padding: 15px; background: white; opacity: 0.95;",
+          column(3,
+            # Sidebar controls
+            wellPanel(
+              style = "background: white; padding: 20px;",
               
-              # Year range slider - select single year or range
-              sliderInput("year_slider", "Select Year(s):",
+              h4("Lock Hospital Locations and Railway Expansion (1873–1890)", 
+                 style = "margin-top: 0; font-weight: bold;"),
+              
+              hr(),
+              
+              # Single-year slider
+              sliderInput("year_slider", "Select Year:",
                 min = 1873, max = 1890,
-                value = c(1873, 1873),  # Start with single year (both values same)
+                value = 1873,
                 step = 1,
                 sep = "",
-                dragRange = TRUE,  # Allow dragging the range
-                animate = animationOptions(interval = 1500)
+                animate = animationOptions(interval = 1500, loop = FALSE)
               ),
-              helpText("💡 Drag one handle for a single year, or both handles to select a range.", 
-                       style = "font-size: 10px; color: #7f8c8d; margin-top: -5px; margin-bottom: 10px;"),
               
-              # Act checkboxes - filter which acts to display
-              checkboxGroupInput("acts", "Filter by Acts:",
+              hr(),
+              
+              # Layer toggles
+              h5("Map Layers", style = "font-weight: bold; margin-bottom: 10px;"),
+              checkboxInput("show_railways", "Railway Lines & Stations", value = TRUE),
+              checkboxInput("show_hospitals", "Lock Hospital Admissions", value = TRUE),
+              
+              hr(),
+              
+              # Act checkboxes
+              h5("Filter by Acts", style = "font-weight: bold; margin-bottom: 10px;"),
+              checkboxGroupInput("acts", NULL,
                 choices = list(
                   "Act XXII of 1864" = "Act XXII of 1864",
                   "Act XII of 1864" = "Act XII of 1864",
@@ -257,25 +266,58 @@ ui <- dashboardPage(
                 selected = c("Act XXII of 1864", "Act XII of 1864", "Act XIV of 1868", "Act III of 1880", "Voluntary System")
               ),
               
-              hr(style = "margin: 15px 0;"),
-              
-              # Railway overlay toggle
-              checkboxInput("show_railways", "Show Railway Lines & Stations", value = TRUE),
+              hr(),
               
               # Legend
+              h5("Legend", style = "font-weight: bold; margin-bottom: 10px;"),
               htmlOutput("map_legend")
+            )
+          ),
+          column(9,
+            # Map display
+            box(
+              title = NULL,
+              status = "primary",
+              solidHeader = FALSE,
+              width = 12,
+              height = "750px",
+              leafletOutput("map", height = "700px")
             )
           )
         ),
-        # Timeline visualization
+        # Data tables for map data
         fluidRow(
           box(
-            title = "Women Admissions Over Time",
+            title = "Lock Hospital Admission Data",
             status = "primary",
             solidHeader = TRUE,
             width = 12,
-            height = "400px",
-            plotlyOutput("women_timeline", height = "300px")
+            collapsible = TRUE,
+            DT::dataTableOutput("map_data_table")
+          )
+        ),
+        fluidRow(
+          column(6,
+            box(
+              title = "Railway Lines in Operation",
+              status = "info",
+              solidHeader = TRUE,
+              width = 12,
+              collapsible = TRUE,
+              collapsed = TRUE,
+              DT::dataTableOutput("railway_lines_table")
+            )
+          ),
+          column(6,
+            box(
+              title = "Railway Stations",
+              status = "info",
+              solidHeader = TRUE,
+              width = 12,
+              collapsible = TRUE,
+              collapsed = TRUE,
+              DT::dataTableOutput("railway_stations_table")
+            )
           )
         )
       ),
@@ -790,20 +832,9 @@ server <- function(input, output, session) {
   # ===== INTERACTIVE MAP FUNCTIONALITY =====
   # Reactive data for map - joins stations, women admissions, and acts
   map_data <- reactive({
-    # Handle both single year and year range
-    year_range <- input$year_slider
-    if (length(year_range) == 2) {
-      year_min <- year_range[1]
-      year_max <- year_range[2]
-    } else {
-      year_min <- year_max <- year_range[1]
-    }
-    
-    if (year_min == year_max) {
-      message(sprintf("Fetching map data for year: %d", year_min))
-    } else {
-      message(sprintf("Fetching map data for years: %d-%d", year_min, year_max))
-    }
+    # Single year only
+    selected_year <- input$year_slider
+    message(sprintf("Fetching map data for year: %d", selected_year))
     
     con <- conn()
     if (!DBI::dbIsValid(con)) {
@@ -825,37 +856,34 @@ server <- function(input, output, session) {
       return(data.frame())
     }
     
-    # Get women admission data for selected year(s)
+    # Get women admission data for selected year only
     women_data <- tryCatch({
       dbGetQuery(con, sprintf("
         SELECT station, 
-               SUM(women_start_register) as total_registered, 
-               SUM(women_added) as total_added,
-               SUM(women_removed) as total_removed
+               women_start_register as total_registered, 
+               women_added as total_added,
+               women_removed as total_removed
         FROM women_admission 
-        WHERE year BETWEEN %d AND %d
-        GROUP BY station", year_min, year_max))
+        WHERE year = %d", selected_year))
     }, error = function(e) {
       message("Error querying women_admission: ", e$message)
       return(data.frame())
     })
     
-    message(sprintf("Found %d stations with women data for year(s) %d-%d", nrow(women_data), year_min, year_max))
+    message(sprintf("Found %d stations with women data for year %d", nrow(women_data), selected_year))
     
-    # Get hospital operations data for acts (use most recent act in range)
+    # Get hospital operations data for acts for selected year
     hospital_data <- tryCatch({
       dbGetQuery(con, sprintf("
         SELECT station, act
         FROM hospital_operations
-        WHERE year BETWEEN %d AND %d
-        GROUP BY station
-        HAVING year = MAX(year)", year_min, year_max))
+        WHERE year = %d", selected_year))
     }, error = function(e) {
       message("Error querying hospital_operations: ", e$message)
       return(data.frame())
     })
     
-    message(sprintf("Found %d hospital operations records for year(s) %d-%d", nrow(hospital_data), year_min, year_max))
+    message(sprintf("Found %d hospital operations records for year %d", nrow(hospital_data), selected_year))
     
     # Join data
     map_df <- stations %>%
@@ -867,8 +895,8 @@ server <- function(input, output, session) {
         total_removed = ifelse(is.na(total_removed), 0, total_removed),
         # Flag stations with no data
         has_data = total_added > 0 | total_registered > 0 | total_removed > 0,
-        # Scale circles: small grey circles for no data, sized circles for data
-        radius = ifelse(has_data, pmax(5, sqrt(pmax(0, total_added)) * 3), 4)
+        # Smaller radius for hospital circles (reduced visibility)
+        radius = ifelse(has_data, pmax(3, sqrt(pmax(0, total_added)) * 2), 3)
       )
     
     # Filter by selected acts if checkbox filters are active
@@ -912,7 +940,7 @@ server <- function(input, output, session) {
   output$map <- renderLeaflet({
     message("Initializing base map")
     map <- leaflet() %>%
-      addTiles() %>%
+      addProviderTiles(providers$CartoDB.Positron) %>%
       setView(lng = 78.9629, lat = 20.5937, zoom = 5)
     
     # Add British India boundary if available
@@ -923,8 +951,8 @@ server <- function(input, output, session) {
           fillColor = "transparent",
           fillOpacity = 0,
           color = "#8B4513",  # Saddle brown
-          weight = 3,
-          opacity = 0.8,
+          weight = 2,
+          opacity = 0.6,
           dashArray = "5, 5",  # Dashed line
           group = "boundary",
           popup = ~name
@@ -936,17 +964,16 @@ server <- function(input, output, session) {
   
   # Update railway overlays when checkbox changes or year changes
   observe({
-    req(input$show_railways, input$year_slider)
+    req(input$year_slider)
     
-    if (input$show_railways && !is.null(railway_lines) && !is.null(railway_stations)) {
-      # Get the year range
-      year_range <- input$year_slider
-      max_year <- ifelse(length(year_range) == 2, year_range[2], year_range[1])
+    if (!is.null(input$show_railways) && input$show_railways && !is.null(railway_lines) && !is.null(railway_stations)) {
+      # Get the selected year
+      selected_year <- input$year_slider
       
       # Filter railway lines to only show those opened by the selected year
-      railways_filtered <- railway_lines[railway_lines$Year <= max_year, ]
+      railways_filtered <- railway_lines[railway_lines$Year <= selected_year, ]
       
-      message(sprintf("Adding %d railway lines (opened by year %d) to map", nrow(railways_filtered), max_year))
+      message(sprintf("Adding %d railway lines (opened by year %d) to map", nrow(railways_filtered), selected_year))
       
       leafletProxy("map") %>%
         clearGroup("railways") %>%
@@ -955,30 +982,30 @@ server <- function(input, output, session) {
       # Only add railways if there are any to display
       if (nrow(railways_filtered) > 0) {
         leafletProxy("map") %>%
-          # Add railway lines (only those operational by selected year)
+          # Add railway lines (grey, semi-transparent)
           addPolylines(
             data = railways_filtered,
-            color = "#000000",
-            weight = 4,
-            opacity = 0.9,
+            color = "#7f8c8d",  # Grey color
+            weight = 3,
+            opacity = 0.7,
             group = "railways",
             popup = ~paste0(
-              "<b>", Section, "</b><br>",
+              "<b>Railway Line</b><br>",
+              "Section: ", Section, "<br>",
               "Railway: ", Railway, "<br>",
-              "Opened: ", Month, "/", Day, "/", Year, "<br>",
-              "Distance: ", Miles, " miles<br>",
-              start_name, " → ", end_name
+              "Opened: ", Year, "<br>",
+              "Distance: ", Miles, " miles"
             ),
             label = ~Section
           ) %>%
-          # Add railway station markers
+          # Add railway station markers (yellow dots)
           addCircleMarkers(
             data = railway_stations,
-            radius = 5,
-            color = "#000000",
-            fillColor = "#ffeb3b",
-            fillOpacity = 0.9,
-            weight = 2,
+            radius = 4,
+            color = "#f39c12",  # Orange border
+            fillColor = "#f1c40f",  # Yellow fill
+            fillOpacity = 0.8,
+            weight = 1.5,
             group = "railway_stations",
             popup = ~paste0(
               "<b>Railway Station</b><br>",
@@ -999,33 +1026,40 @@ server <- function(input, output, session) {
   # Update map markers when data or filters change
   observe({
     req(input$year_slider)
+    
+    # Clear hospitals if toggle is off
+    if (!is.null(input$show_hospitals) && !input$show_hospitals) {
+      leafletProxy("map") %>%
+        clearGroup("lock_hospitals")
+      return()
+    }
+    
     data <- map_data()
     
     if (nrow(data) == 0) {
       message("No map data to display")
       leafletProxy("map") %>%
-        clearMarkers() %>%
-        clearControls()
+        clearGroup("lock_hospitals")
       return()
     }
     
-    message(sprintf("Updating map with %d markers", nrow(data)))
+    message(sprintf("Updating map with %d hospital markers", nrow(data)))
     
     # Assign colors based on act type and data availability
     data <- data %>%
       dplyr::mutate(
         marker_color = dplyr::case_when(
-          !has_data ~ "#95a5a6",                          # Grey for no women data
-          is.na(act) ~ "#34495e",                         # Dark grey for data but no act
+          !has_data ~ "#bdc3c7",                          # Light grey for no women data
+          is.na(act) ~ "#7f8c8d",                         # Grey for data but no act
           act == "Act XXII of 1864" ~ "#e74c3c",          # Red
           act == "Act XII of 1864" ~ "#c0392b",           # Dark red
           act == "Act XIV of 1868" ~ "#3498db",           # Blue
           act == "Act III of 1880" ~ "#9b59b6",           # Purple
           act == "Voluntary System" ~ "#27ae60",          # Green
-          TRUE ~ "#95a5a6"                                # Default grey
+          TRUE ~ "#bdc3c7"                                # Default light grey
         ),
-        # Adjust opacity: lower for stations with no data
-        marker_opacity = ifelse(has_data, 0.8, 0.5)
+        # Reduced opacity for all hospital markers (semi-transparent)
+        marker_opacity = ifelse(has_data, 0.6, 0.4)
       )
     
     leafletProxy("map", data = data) %>%
@@ -1036,21 +1070,23 @@ server <- function(input, output, session) {
         radius = ~radius,
         group = "lock_hospitals",
         popup = ~paste0(
-          "<b>", name, "</b><br>",
+          "<b>Lock Hospital: ", name, "</b><br>",
           "Region: ", region, "<br>",
+          "Year: ", input$year_slider, "<br>",
           ifelse(has_data, 
             paste0(
-              "<b>Women Added to Register: ", total_added, "</b><br>",
+              "<b>Women Added: ", total_added, "</b><br>",
               "Total Registered: ", total_registered, "<br>",
               "Removed: ", total_removed, "<br>"
             ),
-            "<i style='color:#7f8c8d;'>No women admission data for this year</i><br>"
+            "<i style='color:#7f8c8d;'>No admission data for this year</i><br>"
           ),
           "Act: ", ifelse(is.na(act), "None", act)
         ),
+        label = ~name,
         fillColor = ~marker_color,
         fillOpacity = ~marker_opacity,
-        color = "#ffffff",
+        color = "#2c3e50",
         weight = 1,
         stroke = TRUE
       )
@@ -1059,88 +1095,145 @@ server <- function(input, output, session) {
   # Map legend
   output$map_legend <- renderUI({
     railway_legend <- if (!is.null(input$show_railways) && input$show_railways) {
-      '
-      <hr style="margin: 10px 0;">
-      <h4 style="margin-top: 10px; font-size: 13px;">Railway Infrastructure</h4>
-      <div style="margin-top: 5px; font-size: 11px; line-height: 1.8;">
-        <div style="border-bottom: 2px solid #2c3e50; width: 20px; display: inline-block; margin-right: 5px;"></div> Railway Lines (1853-1890)<br>
-        <i class="fa fa-circle" style="color: #34495e; font-size: 8px;"></i> Railway Stations
+      '<div style="margin-bottom: 10px; padding-bottom: 10px; border-bottom: 1px solid #ddd;">
+        <strong style="font-size: 11px;">Railway Infrastructure</strong>
+        <div style="margin-top: 5px; font-size: 11px; line-height: 1.8;">
+          <div style="border-bottom: 3px solid #7f8c8d; width: 25px; display: inline-block; margin-right: 8px; vertical-align: middle;"></div> Railway Lines<br>
+          <i class="fa fa-circle" style="color: #f1c40f; font-size: 10px;"></i> Railway Stations
+        </div>
+      </div>'
+    } else {
+      ""
+    }
+    
+    hospital_legend <- if (!is.null(input$show_hospitals) && input$show_hospitals) {
+      '<div style="margin-bottom: 10px; padding-bottom: 10px; border-bottom: 1px solid #ddd;">
+        <strong style="font-size: 11px;">Lock Hospitals</strong>
+        <div style="font-size: 10px; color: #7f8c8d; margin-top: 3px; margin-bottom: 5px;">Circle size = women added</div>
       </div>'
     } else {
       ""
     }
     
     HTML(paste0('
-      <div style="background: white; padding: 10px; border-radius: 4px;">
-        <h4 style="margin-top: 0; font-size: 13px;">Circle Size</h4>
-        <p style="font-size: 11px; margin: 5px 0;">Indicates <b>women added</b> to Lock Hospital registers</p>
-        <hr style="margin: 10px 0;">
-        <h4 style="margin-top: 10px; font-size: 13px;">Contagious Diseases Acts</h4>
+      <div style="font-size: 11px;">
+        ', railway_legend, hospital_legend, '
+        <strong style="font-size: 11px;">Contagious Diseases Acts</strong>
         <div style="margin-top: 5px; font-size: 11px; line-height: 1.8;">
           <i class="fa fa-circle" style="color: #e74c3c;"></i> Act XXII of 1864<br>
           <i class="fa fa-circle" style="color: #c0392b;"></i> Act XII of 1864<br>
           <i class="fa fa-circle" style="color: #3498db;"></i> Act XIV of 1868<br>
           <i class="fa fa-circle" style="color: #9b59b6;"></i> Act III of 1880<br>
           <i class="fa fa-circle" style="color: #27ae60;"></i> Voluntary System<br>
-          <i class="fa fa-circle" style="color: #34495e;"></i> Has Data, No Act<br>
-          <i class="fa fa-circle" style="color: #95a5a6; opacity: 0.5;"></i> No Data Available
+          <i class="fa fa-circle" style="color: #7f8c8d;"></i> Data, No Act<br>
+          <i class="fa fa-circle" style="color: #bdc3c7; opacity: 0.5;"></i> No Data
         </div>
-        ', railway_legend, '
       </div>
     '))
   })
   
-  # Women admissions timeline
-  output$women_timeline <- renderPlotly({
-    con <- conn()
+  # Map data table - shows Lock Hospital admission data for selected year
+  output$map_data_table <- DT::renderDataTable({
+    data <- map_data()
     
-    yearly_data <- tryCatch({
-      dbGetQuery(con, "
-        SELECT year, 
-               SUM(women_start_register) as total_registered,
-               SUM(women_added) as new_admissions,
-               SUM(women_removed) as removed
-        FROM women_admission 
-        GROUP BY year
-        ORDER BY year
-      ")
-    }, error = function(e) {
-      message("Error fetching timeline data: ", e$message)
-      return(data.frame())
-    })
-    
-    if (nrow(yearly_data) == 0) {
-      plot_ly() %>%
-        layout(title = "No women admission data available")
-    } else {
-      plot_ly(yearly_data) %>%
-        add_trace(
-          x = ~year,
-          y = ~total_registered,
-          name = "Total Registered",
-          type = "scatter",
-          mode = "lines+markers",
-          line = list(color = "#e74c3c"),
-          marker = list(size = 8)
-        ) %>%
-        add_trace(
-          x = ~year,
-          y = ~new_admissions,
-          name = "New Admissions",
-          type = "scatter",
-          mode = "lines+markers",
-          line = list(color = "#3498db"),
-          marker = list(size = 8)
-        ) %>%
-        layout(
-          title = "Women Admissions Over Time",
-          xaxis = list(title = "Year"),
-          yaxis = list(title = "Number of Women"),
-          hovermode = "x unified",
-          legend = list(x = 0.1, y = 0.9)
-        )
+    if (nrow(data) == 0) {
+      return(DT::datatable(data.frame(Message = "No data available for selected year and filters")))
     }
+    
+    # Select and rename columns for display
+    display_data <- data %>%
+      dplyr::select(
+        Station = name,
+        Region = region,
+        Country = country,
+        `Women Registered` = total_registered,
+        `Women Added` = total_added,
+        Act = act
+      ) %>%
+      dplyr::arrange(desc(`Women Added`))
+    
+    DT::datatable(
+      display_data,
+      options = list(
+        pageLength = 10,
+        scrollX = FALSE,
+        dom = 'ftip',
+        initComplete = JS(
+          "function(settings, json) {",
+          "$(this.api().table().header()).css({'background-color': '#3498db', 'color': '#fff'});",
+          "}"
+        )
+      ),
+      rownames = FALSE,
+      filter = 'none'
+    )
   })
+  
+  # Railway lines table - shows lines operational in selected year
+  output$railway_lines_table <- DT::renderDataTable({
+    req(input$year_slider)
+    
+    if (is.null(railway_lines)) {
+      return(DT::datatable(data.frame(Message = "Railway data not available")))
+    }
+    
+    selected_year <- input$year_slider
+    railways_filtered <- railway_lines[railway_lines$Year <= selected_year, ]
+    
+    if (nrow(railways_filtered) == 0) {
+      return(DT::datatable(data.frame(Message = paste("No railways operational by", selected_year))))
+    }
+    
+    # Convert to regular dataframe and select columns
+    display_data <- as.data.frame(railways_filtered) %>%
+      dplyr::select(
+        Section = Section,
+        Railway = Railway,
+        `Year Opened` = Year,
+        `Distance (miles)` = Miles,
+        From = start_name,
+        To = end_name
+      ) %>%
+      dplyr::arrange(`Year Opened`)
+    
+    DT::datatable(
+      display_data,
+      options = list(
+        pageLength = 10,
+        scrollX = FALSE,
+        dom = 'ftip'
+      ),
+      rownames = FALSE
+    )
+  })
+  
+  # Railway stations table
+  output$railway_stations_table <- DT::renderDataTable({
+    if (is.null(railway_stations)) {
+      return(DT::datatable(data.frame(Message = "Railway station data not available")))
+    }
+    
+    # Convert to regular dataframe
+    display_data <- as.data.frame(railway_stations) %>%
+      dplyr::select(
+        `Historic Name` = orig_name,
+        `Modern Name` = modern_nam,
+        Latitude = lat,
+        Longitude = lon
+      ) %>%
+      dplyr::arrange(`Historic Name`)
+    
+    DT::datatable(
+      display_data,
+      options = list(
+        pageLength = 10,
+        scrollX = FALSE,
+        dom = 'ftip'
+      ),
+      rownames = FALSE
+    )
+  })
+  
   # ===== END INTERACTIVE MAP FUNCTIONALITY =====
   
   # Image Gallery Navigation
@@ -1814,7 +1907,7 @@ server <- function(input, output, session) {
   ds_version <- reactiveVal(0)
 
   ds_dataset_clean <- reactive({
-    v <- ds_version()  # dependency
+    ds_version()  # dependency to trigger reactivity
     path <- .find_ds_dataset_file()
     if (is.null(path)) return(data.frame())
     if (!requireNamespace("readxl", quietly = TRUE)) {
@@ -1932,7 +2025,6 @@ server <- function(input, output, session) {
     validate(need(nrow(ds) > 0, "No DS dataset rows to save"))
     tbl <- "ds_staff_mentions"
     con <- conn()
-    ok <- TRUE; msg <- NULL
     try({
       if (DBI::dbExistsTable(con, tbl)) {
         # Replace with latest cleaned extract
@@ -2073,13 +2165,6 @@ server <- function(input, output, session) {
     x0[x0 == ""] <- NA_character_
     x0
   }
-  # Extract integer from mixed text (e.g., "3 MO" -> 3)
-  .parse_int <- function(x) {
-    if (is.null(x)) return(NA_integer_)
-    if (is.numeric(x)) return(as.integer(round(x)))
-    digits <- suppressWarnings(as.integer(gsub("[^0-9]", "", as.character(x))))
-    ifelse(is.na(digits) | is.nan(digits), NA_integer_, digits)
-  }
   # Normalize inspection regularity to categories
   .normalize_regularity <- function(x) {
     # sanitize first to strip odd characters, then normalize
@@ -2116,7 +2201,6 @@ server <- function(input, output, session) {
     # Load ops table
     ops <- ops_df()
     if (nrow(ops) == 0) return(ops)
-    cols <- dbGetQuery(conn(), "PRAGMA table_info(hospital_operations)")$name
     want <- c(
       "station","region","country","year",
       "ops_inspection_regularity","ops_unlicensed_control_notes",
