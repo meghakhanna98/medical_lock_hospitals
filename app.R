@@ -257,13 +257,13 @@ ui <- dashboardPage(
               h5("Filter by Acts", style = "font-weight: bold; margin-bottom: 10px;"),
               checkboxGroupInput("acts", NULL,
                 choices = list(
-                  "Act XXII of 1864" = "Act XXII of 1864",
-                  "Act XII of 1864" = "Act XII of 1864",
-                  "Act XIV of 1868" = "Act XIV of 1868",
-                  "Act III of 1880" = "Act III of 1880",
+                  "Cantonment Act 1864" = "Cantonment Act 1864",
+                  "Contagious Diseases Act 1868" = "Contagious Diseases Act 1868",
+                  "Cantonment Act 1880" = "Cantonment Act 1880",
+                  "Cantonment Act 1889" = "Cantonment Act 1889",
                   "Voluntary System" = "Voluntary System"
                 ),
-                selected = c("Act XXII of 1864", "Act XII of 1864", "Act XIV of 1868", "Act III of 1880", "Voluntary System")
+                selected = c("Cantonment Act 1864", "Contagious Diseases Act 1868", "Cantonment Act 1880", "Cantonment Act 1889", "Voluntary System")
               ),
               
               hr(),
@@ -873,19 +873,23 @@ server <- function(input, output, session) {
     message(sprintf("Found %d stations with women data for year %d", nrow(women_data), selected_year))
     
     # Get hospital operations data for acts for selected year
+    # Group by station to handle multiple acts per station-year
     hospital_data <- tryCatch({
       dbGetQuery(con, sprintf("
-        SELECT station, act
+        SELECT station, 
+               GROUP_CONCAT(act, '; ') as act,
+               COUNT(DISTINCT act) as n_acts
         FROM hospital_operations
-        WHERE year = %d", selected_year))
+        WHERE year = %d AND act IS NOT NULL AND act != ''
+        GROUP BY station", selected_year))
     }, error = function(e) {
       message("Error querying hospital_operations: ", e$message)
       return(data.frame())
     })
     
-    message(sprintf("Found %d hospital operations records for year %d", nrow(hospital_data), selected_year))
+    message(sprintf("Found %d stations with hospital operations for year %d", nrow(hospital_data), selected_year))
     
-    # Join data
+    # Join data (now one-to-one joins, no duplicates)
     map_df <- stations %>%
       dplyr::left_join(women_data, by = c("name" = "station")) %>%
       dplyr::left_join(hospital_data, by = c("name" = "station")) %>%
@@ -896,13 +900,24 @@ server <- function(input, output, session) {
         # Flag stations with no data
         has_data = total_added > 0 | total_registered > 0 | total_removed > 0,
         # Smaller radius for hospital circles (reduced visibility)
-        radius = ifelse(has_data, pmax(3, sqrt(pmax(0, total_added)) * 2), 3)
+        radius = ifelse(has_data, pmax(3, sqrt(pmax(0, total_added)) * 2), 3),
+        # For display: extract primary (first) act for color coding
+        primary_act = ifelse(is.na(act), NA, sub(";.*", "", act)),
+        # Flag for multiple acts
+        multiple_acts = !is.na(n_acts) & n_acts > 1
       )
     
     # Filter by selected acts if checkbox filters are active
-    # Keep stations with no act data (show as grey) but filter the ones with acts
+    # For stations with multiple acts, show if ANY of their acts match the filter
     if (!is.null(input$acts) && length(input$acts) > 0) {
-      map_df <- map_df %>% dplyr::filter(is.na(act) | act %in% input$acts)
+      map_df <- map_df %>% dplyr::filter(
+        is.na(act) | 
+        sapply(act, function(acts_string) {
+          if (is.na(acts_string)) return(TRUE)
+          station_acts <- strsplit(acts_string, "; ")[[1]]
+          any(station_acts %in% input$acts)
+        })
+      )
       message(sprintf("After act filter: %d stations remain", nrow(map_df)))
     }
     
@@ -1049,14 +1064,14 @@ server <- function(input, output, session) {
     data <- data %>%
       dplyr::mutate(
         marker_color = dplyr::case_when(
-          !has_data ~ "#bdc3c7",                          # Light grey for no women data
-          is.na(act) ~ "#7f8c8d",                         # Grey for data but no act
-          act == "Act XXII of 1864" ~ "#e74c3c",          # Red
-          act == "Act XII of 1864" ~ "#c0392b",           # Dark red
-          act == "Act XIV of 1868" ~ "#3498db",           # Blue
-          act == "Act III of 1880" ~ "#9b59b6",           # Purple
-          act == "Voluntary System" ~ "#27ae60",          # Green
-          TRUE ~ "#bdc3c7"                                # Default light grey
+          !has_data ~ "#bdc3c7",                                       # Light grey for no women data
+          is.na(primary_act) ~ "#7f8c8d",                              # Grey for data but no act
+          primary_act == "Cantonment Act 1864" ~ "#e74c3c",            # Red
+          primary_act == "Contagious Diseases Act 1868" ~ "#3498db",   # Blue
+          primary_act == "Cantonment Act 1880" ~ "#9b59b6",            # Purple
+          primary_act == "Cantonment Act 1889" ~ "#f39c12",            # Orange
+          primary_act == "Voluntary System" ~ "#27ae60",               # Green
+          TRUE ~ "#bdc3c7"                                             # Default light grey
         ),
         # Reduced opacity for all hospital markers (semi-transparent)
         marker_opacity = ifelse(has_data, 0.6, 0.4)
@@ -1081,7 +1096,13 @@ server <- function(input, output, session) {
             ),
             "<i style='color:#7f8c8d;'>No admission data for this year</i><br>"
           ),
-          "Act: ", ifelse(is.na(act), "None", act)
+          ifelse(is.na(act), 
+            "Act: None", 
+            ifelse(multiple_acts,
+              paste0("<b>Acts: ", act, "</b> (multiple acts)"),
+              paste0("Act: ", act)
+            )
+          )
         ),
         label = ~name,
         fillColor = ~marker_color,
@@ -1120,10 +1141,10 @@ server <- function(input, output, session) {
         ', railway_legend, hospital_legend, '
         <strong style="font-size: 11px;">Contagious Diseases Acts</strong>
         <div style="margin-top: 5px; font-size: 11px; line-height: 1.8;">
-          <i class="fa fa-circle" style="color: #e74c3c;"></i> Act XXII of 1864<br>
-          <i class="fa fa-circle" style="color: #c0392b;"></i> Act XII of 1864<br>
-          <i class="fa fa-circle" style="color: #3498db;"></i> Act XIV of 1868<br>
-          <i class="fa fa-circle" style="color: #9b59b6;"></i> Act III of 1880<br>
+          <i class="fa fa-circle" style="color: #e74c3c;"></i> Cantonment Act 1864<br>
+          <i class="fa fa-circle" style="color: #3498db;"></i> Contagious Diseases Act 1868<br>
+          <i class="fa fa-circle" style="color: #9b59b6;"></i> Cantonment Act 1880<br>
+          <i class="fa fa-circle" style="color: #f39c12;"></i> Cantonment Act 1889<br>
           <i class="fa fa-circle" style="color: #27ae60;"></i> Voluntary System<br>
           <i class="fa fa-circle" style="color: #7f8c8d;"></i> Data, No Act<br>
           <i class="fa fa-circle" style="color: #bdc3c7; opacity: 0.5;"></i> No Data
@@ -1360,14 +1381,26 @@ server <- function(input, output, session) {
       dbGetQuery(conn(), paste("SELECT COUNT(*) as count FROM", t))$count
     })
     complete_records <- sapply(tables, function(t) {
+      # Check what columns exist in the table first
+      cols <- dbGetQuery(conn(), paste0("PRAGMA table_info(", t, ")"))$name
+      
       if (t %in% c("women_admission", "troops")) {
-        dbGetQuery(conn(), paste("SELECT COUNT(*) as count FROM", t, "WHERE doc_id IS NOT NULL AND source_name IS NOT NULL"))$count
+        if ("doc_id" %in% cols && "source_name" %in% cols) {
+          dbGetQuery(conn(), paste("SELECT COUNT(*) as count FROM", t, "WHERE doc_id IS NOT NULL AND source_name IS NOT NULL"))$count
+        } else {
+          dbGetQuery(conn(), paste("SELECT COUNT(*) as count FROM", t))$count
+        }
       } else if (t == "hospital_operations") {
-        dbGetQuery(conn(), paste("SELECT COUNT(*) as count FROM", t, "WHERE doc_id IS NOT NULL"))$count
+        # hospital_operations now only has station, year, act
+        # Consider complete if station and year are not null
+        if ("station" %in% cols && "year" %in% cols) {
+          dbGetQuery(conn(), paste("SELECT COUNT(*) as count FROM", t, "WHERE station IS NOT NULL AND year IS NOT NULL"))$count
+        } else {
+          dbGetQuery(conn(), paste("SELECT COUNT(*) as count FROM", t))$count
+        }
       } else if (t == "stations") {
         dbGetQuery(conn(), paste("SELECT COUNT(*) as count FROM", t, "WHERE name IS NOT NULL"))$count
       } else {
-        cols <- dbGetQuery(conn(), paste0("PRAGMA table_info(", t, ")"))$name
         if ("unique_id" %in% cols) {
           dbGetQuery(conn(), paste("SELECT COUNT(*) as count FROM", t, "WHERE unique_id IS NOT NULL"))$count
         } else if ("hid" %in% cols) {
@@ -1664,8 +1697,9 @@ server <- function(input, output, session) {
       null_check <- dbGetQuery(conn(), paste("SELECT COUNT(*) as count FROM", table_name, "WHERE doc_id IS NULL OR source_name IS NULL"))
       validation_results <- paste(validation_results, "Records with NULL doc_id or source_name:", null_check$count, "\n")
     } else if (table_name == "hospital_operations") {
-      null_check <- dbGetQuery(conn(), paste("SELECT COUNT(*) as count FROM", table_name, "WHERE doc_id IS NULL"))
-      validation_results <- paste(validation_results, "Records with NULL doc_id:", null_check$count, "\n")
+      # hospital_operations only has station, year, act - check for those instead
+      null_check <- dbGetQuery(conn(), paste("SELECT COUNT(*) as count FROM", table_name, "WHERE station IS NULL OR year IS NULL"))
+      validation_results <- paste(validation_results, "Records with NULL station or year:", null_check$count, "\n")
     }
     
     # Check for empty strings
@@ -1673,8 +1707,9 @@ server <- function(input, output, session) {
       empty_check <- dbGetQuery(conn(), paste("SELECT COUNT(*) as count FROM", table_name, "WHERE doc_id = '' OR source_name = ''"))
       validation_results <- paste(validation_results, "Records with empty strings:", empty_check$count, "\n")
     } else if (table_name == "hospital_operations") {
-      empty_check <- dbGetQuery(conn(), paste("SELECT COUNT(*) as count FROM", table_name, "WHERE doc_id = ''"))
-      validation_results <- paste(validation_results, "Records with empty doc_id:", empty_check$count, "\n")
+      # Check for empty station values instead
+      empty_check <- dbGetQuery(conn(), paste("SELECT COUNT(*) as count FROM", table_name, "WHERE station = '' OR station IS NULL"))
+      validation_results <- paste(validation_results, "Records with empty station:", empty_check$count, "\n")
     }
     
     output$validation_results <- renderText(validation_results)
@@ -2387,11 +2422,11 @@ server <- function(input, output, session) {
               style = "background: rgba(0,0,0,0.6); color: white; border: none; border-radius: 50%; width: 40px; height: 40px;"
             )
         ),
-        # Main image
+        # Main image (use web-accessible path)
         tags$img(
-          src = img_path,
-          style = "max-width: 100%; height: auto; border-radius: 4px;",
-          onclick = sprintf("window.open('%s', '_blank')", img_path),
+          src = sprintf("images/%s", current_img),
+          style = "max-width: 100%; height: auto; border-radius: 4px; cursor: zoom-in;",
+          onclick = sprintf("window.open('images/%s', '_blank')", current_img),
           alt = img_name
         )
       ),
@@ -3152,13 +3187,11 @@ server <- function(input, output, session) {
     
     # Color palette
     act_colors <- c(
-      "Act XIV of 1868" = "#e74c3c",
-      "Act XXII of 1864" = "#3498db", 
-        "Act XII of 1864" = "#3498db",
-      "Act III of 1880" = "#2ecc71",
-      "Voluntary System" = "#f39c12",
-      "CD Act" = "#e67e22",
-      "Cantonment Act" = "#9b59b6"
+      "Contagious Diseases Act 1868" = "#3498db",       # Blue
+      "Cantonment Act 1864" = "#e74c3c",                # Red
+      "Cantonment Act 1880" = "#9b59b6",                # Purple
+      "Cantonment Act 1889" = "#f39c12",                # Orange
+      "Voluntary System" = "#27ae60"                    # Green
     )
     
     # Create visualization attributes
@@ -3518,7 +3551,8 @@ server <- function(input, output, session) {
     # Calculate year ranges and missing years for all datasets
     women <- women_df()
     troops <- troops_df()
-    ops <- hospital_ops_enriched()
+    # Use simple hospital_operations instead of enriched version
+    ops <- tryCatch(ops_df(), error = function(e) data.frame())
     
     # Helper function to get missing years
     get_missing_years <- function(years) {
