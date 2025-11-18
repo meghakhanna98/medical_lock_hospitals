@@ -161,6 +161,22 @@ ui <- dashboardPage(
               uiOutput("story_total_stats")
             ),
             div(class = "viz-container",
+              div(style = "margin-bottom: 15px; padding: 15px; background: #f8f9fa; border-radius: 4px;",
+                h4("Filter Stations by Contagious Diseases Acts", style = "margin-top: 0; margin-bottom: 12px; color: #2c3e50; font-size: 16px;"),
+                checkboxGroupInput("story_map_acts_filter",
+                  label = NULL,
+                  choices = c(
+                    "Act XXII of 1864 / Cantonment Act 1864" = "1864",
+                    "Act XIV of 1868 / Contagious Diseases Act 1868" = "1868",
+                    "Act III of 1880 / Cantonment Act 1880" = "1880",
+                    "Cantonment Act 1889" = "1889",
+                    "Voluntary System" = "voluntary",
+                    "No Act / Unknown" = "none"
+                  ),
+                  selected = c("1864", "1868", "1880", "1889", "voluntary", "none"),
+                  inline = FALSE
+                )
+              ),
               leafletOutput("story_map_overview", height = 500)
             ),
             br(),
@@ -249,22 +265,8 @@ ui <- dashboardPage(
               # Layer toggles
               h5("Map Layers", style = "font-weight: bold; margin-bottom: 10px;"),
               checkboxInput("show_railways", "Railway Lines & Stations", value = TRUE),
-              checkboxInput("show_hospitals", "Lock Hospital Admissions", value = TRUE),
-              
+
               hr(),
-              
-              # Act checkboxes
-              h5("Filter by Acts", style = "font-weight: bold; margin-bottom: 10px;"),
-              checkboxGroupInput("acts", NULL,
-                choices = list(
-                  "Cantonment Act 1864" = "Cantonment Act 1864",
-                  "Contagious Diseases Act 1868" = "Contagious Diseases Act 1868",
-                  "Cantonment Act 1880" = "Cantonment Act 1880",
-                  "Cantonment Act 1889" = "Cantonment Act 1889",
-                  "Voluntary System" = "Voluntary System"
-                ),
-                selected = c("Cantonment Act 1864", "Contagious Diseases Act 1868", "Cantonment Act 1880", "Cantonment Act 1889", "Voluntary System")
-              ),
               
               hr(),
               
@@ -828,6 +830,11 @@ server <- function(input, output, session) {
   conn <- reactive({
     con_obj
   })
+
+  # On app start, set the year slider to 1873 (earliest year with data)
+  try({
+    updateSliderInput(session, "year_slider", value = 1873)
+  }, silent = TRUE)
   
   # ===== INTERACTIVE MAP FUNCTIONALITY =====
   # Reactive data for map - joins stations, women admissions, and acts
@@ -860,7 +867,7 @@ server <- function(input, output, session) {
     women_data <- tryCatch({
       dbGetQuery(con, sprintf("
         SELECT station, 
-               women_start_register as total_registered, 
+               avg_registered as total_registered, 
                women_added as total_added,
                women_removed as total_removed
         FROM women_admission 
@@ -894,32 +901,21 @@ server <- function(input, output, session) {
       dplyr::left_join(women_data, by = c("name" = "station")) %>%
       dplyr::left_join(hospital_data, by = c("name" = "station")) %>%
       dplyr::mutate(
-        total_registered = ifelse(is.na(total_registered), 0, total_registered),
-        total_added = ifelse(is.na(total_added), 0, total_added),
-        total_removed = ifelse(is.na(total_removed), 0, total_removed),
+        total_registered = round(ifelse(is.na(total_registered), 0, total_registered), 0),
+        total_added = round(ifelse(is.na(total_added), 0, total_added), 0),
+        total_removed = round(ifelse(is.na(total_removed), 0, total_removed), 0),
         # Flag stations with no data
         has_data = total_added > 0 | total_registered > 0 | total_removed > 0,
-        # Smaller radius for hospital circles (reduced visibility)
-        radius = ifelse(has_data, pmax(3, sqrt(pmax(0, total_added)) * 2), 3),
+  # Smaller radius for hospital circles (reduced visibility)
+  # Use total_registered (total women) for circle size instead of total_added
+  radius = ifelse(has_data, pmax(3, sqrt(pmax(0, total_registered)) * 2), 3),
         # For display: extract primary (first) act for color coding
         primary_act = ifelse(is.na(act), NA, sub(";.*", "", act)),
         # Flag for multiple acts
         multiple_acts = !is.na(n_acts) & n_acts > 1
       )
     
-    # Filter by selected acts if checkbox filters are active
-    # For stations with multiple acts, show if ANY of their acts match the filter
-    if (!is.null(input$acts) && length(input$acts) > 0) {
-      map_df <- map_df %>% dplyr::filter(
-        is.na(act) | 
-        sapply(act, function(acts_string) {
-          if (is.na(acts_string)) return(TRUE)
-          station_acts <- strsplit(acts_string, "; ")[[1]]
-          any(station_acts %in% input$acts)
-        })
-      )
-      message(sprintf("After act filter: %d stations remain", nrow(map_df)))
-    }
+    # No act filters applied here — show all stations and display acts in popups.
     
     message(sprintf("Returning %d stations for map display", nrow(map_df)))
     map_df
@@ -985,35 +981,21 @@ server <- function(input, output, session) {
       # Get the selected year
       selected_year <- input$year_slider
       
-      # Filter railway lines to only show those opened by the selected year
-      railways_filtered <- railway_lines[railway_lines$Year <= selected_year, ]
+  # Filter railway lines to only show those opened by the selected year.
+  # Coerce Year to numeric safely and include lines with missing/NA Year so
+  # stations with no recorded opening year still display their lines.
+  rail_year <- suppressWarnings(as.numeric(as.character(railway_lines$Year)))
+  railways_filtered <- railway_lines[ ( !is.na(rail_year) & rail_year <= selected_year ) | is.na(rail_year), ]
       
-      message(sprintf("Adding %d railway lines (opened by year %d) to map", nrow(railways_filtered), selected_year))
-      
+      message(sprintf("Adding railway station overlays for year %d (railway lines disabled)", selected_year))
+
       leafletProxy("map") %>%
         clearGroup("railways") %>%
         clearGroup("railway_stations")
-      
-      # Only add railways if there are any to display
-      if (nrow(railways_filtered) > 0) {
+
+      # Only add railway stations (lines intentionally omitted)
+      if (nrow(railway_stations) > 0) {
         leafletProxy("map") %>%
-          # Add railway lines (grey, semi-transparent)
-          addPolylines(
-            data = railways_filtered,
-            color = "#7f8c8d",  # Grey color
-            weight = 3,
-            opacity = 0.7,
-            group = "railways",
-            popup = ~paste0(
-              "<b>Railway Line</b><br>",
-              "Section: ", Section, "<br>",
-              "Railway: ", Railway, "<br>",
-              "Opened: ", Year, "<br>",
-              "Distance: ", Miles, " miles"
-            ),
-            label = ~Section
-          ) %>%
-          # Add railway station markers (yellow dots)
           addCircleMarkers(
             data = railway_stations,
             radius = 4,
@@ -1042,12 +1024,7 @@ server <- function(input, output, session) {
   observe({
     req(input$year_slider)
     
-    # Clear hospitals if toggle is off
-    if (!is.null(input$show_hospitals) && !input$show_hospitals) {
-      leafletProxy("map") %>%
-        clearGroup("lock_hospitals")
-      return()
-    }
+    # Always show hospital markers (no toggle)
     
     data <- map_data()
     
@@ -1061,17 +1038,20 @@ server <- function(input, output, session) {
     message(sprintf("Updating map with %d hospital markers", nrow(data)))
     
     # Assign colors based on act type and data availability
+    # NOTE: act text in the DB can use multiple naming conventions (e.g. "Act XXII of 1864", "Cantonment Act 1864",
+    # "Act XIV of 1868", "Contagious Diseases Act 1868"). Match by year/keyword substrings rather than exact equality
     data <- data %>%
       dplyr::mutate(
+        # primary_act may contain different phrasings; test for year tokens or keywords to decide color
         marker_color = dplyr::case_when(
-          !has_data ~ "#bdc3c7",                                       # Light grey for no women data
-          is.na(primary_act) ~ "#7f8c8d",                              # Grey for data but no act
-          primary_act == "Cantonment Act 1864" ~ "#e74c3c",            # Red
-          primary_act == "Contagious Diseases Act 1868" ~ "#3498db",   # Blue
-          primary_act == "Cantonment Act 1880" ~ "#9b59b6",            # Purple
-          primary_act == "Cantonment Act 1889" ~ "#f39c12",            # Orange
-          primary_act == "Voluntary System" ~ "#27ae60",               # Green
-          TRUE ~ "#bdc3c7"                                             # Default light grey
+          !has_data ~ "#ecf0f1",                                           # Very light grey for no women data
+          is.na(primary_act) ~ "#2c3e50",                                    # Dark charcoal for data but no act
+          grepl("1864", primary_act, ignore.case = TRUE) ~ "#e74c3c",       # Red for 1864-era acts
+          grepl("1868", primary_act, ignore.case = TRUE) ~ "#3498db",       # Blue for 1868 acts
+          grepl("1880", primary_act, ignore.case = TRUE) ~ "#9b59b6",       # Purple for 1880 acts
+          grepl("1889", primary_act, ignore.case = TRUE) ~ "#f39c12",       # Orange for 1889/late acts
+          grepl("voluntary", primary_act, ignore.case = TRUE) ~ "#27ae60",  # Green for Voluntary System
+          TRUE ~ "#ecf0f1"                                                   # Default very light grey
         ),
         # Reduced opacity for all hospital markers (semi-transparent)
         marker_opacity = ifelse(has_data, 0.6, 0.4)
@@ -1119,7 +1099,6 @@ server <- function(input, output, session) {
       '<div style="margin-bottom: 10px; padding-bottom: 10px; border-bottom: 1px solid #ddd;">
         <strong style="font-size: 11px;">Railway Infrastructure</strong>
         <div style="margin-top: 5px; font-size: 11px; line-height: 1.8;">
-          <div style="border-bottom: 3px solid #7f8c8d; width: 25px; display: inline-block; margin-right: 8px; vertical-align: middle;"></div> Railway Lines<br>
           <i class="fa fa-circle" style="color: #f1c40f; font-size: 10px;"></i> Railway Stations
         </div>
       </div>'
@@ -1127,14 +1106,10 @@ server <- function(input, output, session) {
       ""
     }
     
-    hospital_legend <- if (!is.null(input$show_hospitals) && input$show_hospitals) {
-      '<div style="margin-bottom: 10px; padding-bottom: 10px; border-bottom: 1px solid #ddd;">
+    hospital_legend <- '<div style="margin-bottom: 10px; padding-bottom: 10px; border-bottom: 1px solid #ddd;">
         <strong style="font-size: 11px;">Lock Hospitals</strong>
-        <div style="font-size: 10px; color: #7f8c8d; margin-top: 3px; margin-bottom: 5px;">Circle size = women added</div>
+  <div style="font-size: 10px; color: #7f8c8d; margin-top: 3px; margin-bottom: 5px;">Circle size = avg. registered women</div>
       </div>'
-    } else {
-      ""
-    }
     
     HTML(paste0('
       <div style="font-size: 11px;">
@@ -1146,8 +1121,8 @@ server <- function(input, output, session) {
           <i class="fa fa-circle" style="color: #9b59b6;"></i> Cantonment Act 1880<br>
           <i class="fa fa-circle" style="color: #f39c12;"></i> Cantonment Act 1889<br>
           <i class="fa fa-circle" style="color: #27ae60;"></i> Voluntary System<br>
-          <i class="fa fa-circle" style="color: #7f8c8d;"></i> Data, No Act<br>
-          <i class="fa fa-circle" style="color: #bdc3c7; opacity: 0.5;"></i> No Data
+          <i class="fa fa-circle" style="color: #2c3e50;"></i> Data, No Act<br>
+          <i class="fa fa-circle" style="color: #ecf0f1; opacity: 0.9;"></i> No Data
         </div>
       </div>
     '))
@@ -1161,8 +1136,17 @@ server <- function(input, output, session) {
       return(DT::datatable(data.frame(Message = "No data available for selected year and filters")))
     }
     
+    # Filter to show only stations with women data (non-zero registered or added)
+    data_filtered <- data %>%
+      dplyr::filter(total_registered > 0 | total_added > 0)
+    
+    # If no stations have data for this year, show a message
+    if (nrow(data_filtered) == 0) {
+      return(DT::datatable(data.frame(Message = paste0("No women admission data available for year ", input$year_slider, ". Try a different year (1873-1889)."))))
+    }
+    
     # Select and rename columns for display
-    display_data <- data %>%
+    display_data <- data_filtered %>%
       dplyr::select(
         Station = name,
         Region = region,
@@ -1170,6 +1154,10 @@ server <- function(input, output, session) {
         `Women Registered` = total_registered,
         `Women Added` = total_added,
         Act = act
+      ) %>%
+      dplyr::mutate(
+        `Women Registered` = round(`Women Registered`, 0),
+        `Women Added` = round(`Women Added`, 0)
       ) %>%
       dplyr::arrange(desc(`Women Added`))
     
@@ -3624,28 +3612,91 @@ server <- function(input, output, session) {
   })
   
   # Story: Overview map
+  # Initialize story map once (base map + legend)
   output$story_map_overview <- renderLeaflet({
-    st <- stations_df()
-    req(nrow(st) > 0)
-    
-    lat_col <- 'latitude'; lon_col <- 'longitude'
-    if (all(c('lat','lon') %in% names(st))) { lat_col <- 'lat'; lon_col <- 'lon' }
-    
-    st2 <- st %>%
-      dplyr::filter(!is.na(.data[[lat_col]]), !is.na(.data[[lon_col]])) %>%
-      dplyr::mutate(lat = as.numeric(.data[[lat_col]]), lon = as.numeric(.data[[lon_col]]))
-    
-    leaflet(st2) %>%
+    leaflet() %>%
       addTiles() %>%
       setView(lng = 78.9629, lat = 20.5937, zoom = 5) %>%
+      addLegend(
+        position = "bottomright",
+        colors = c("#e74c3c", "#3498db", "#9b59b6", "#f39c12", "#27ae60", "#95a5a6"),
+        labels = c("Act XXII of 1864", "Act XIV of 1868", "Act III of 1880", "Act 1889", "Voluntary", "No Act"),
+        title = "Contagious Diseases Acts",
+        opacity = 0.8
+      )
+  })
+  
+  # Update markers when Act filter changes (without re-rendering entire map)
+  observe({
+    st <- stations_df()
+    ops <- ops_df()
+    req(nrow(st) > 0)
+    
+    # Get selected Acts from filter (default to all if none selected)
+    selected_acts <- input$story_map_acts_filter
+    if (is.null(selected_acts) || length(selected_acts) == 0) {
+      selected_acts <- c("1864", "1868", "1880", "1889", "voluntary", "none")
+    }
+    
+    # Join stations with hospital operations to get Acts
+    # Get all unique station-act combinations
+    station_acts <- ops %>%
+      dplyr::select(station, act) %>%
+      dplyr::distinct() %>%
+      dplyr::mutate(
+        act_category = dplyr::case_when(
+          is.na(act) | act == "" | act == "None" ~ "none",
+          grepl("1864|XXII", act, ignore.case = TRUE) ~ "1864",
+          grepl("1868|XIV", act, ignore.case = TRUE) ~ "1868",
+          grepl("1880|III", act, ignore.case = TRUE) ~ "1880",
+          grepl("1889", act, ignore.case = TRUE) ~ "1889",
+          grepl("voluntary|volunt", act, ignore.case = TRUE) ~ "voluntary",
+          TRUE ~ "none"
+        )
+      ) %>%
+      dplyr::filter(act_category %in% selected_acts) %>%
+      dplyr::distinct(station, .keep_all = TRUE)
+    
+    # Filter stations to only those with matching Acts
+    st_filtered <- st %>%
+      dplyr::inner_join(station_acts, by = c("name" = "station"))
+    
+    # If no stations match, show all stations in grey
+    if (nrow(st_filtered) == 0) {
+      st_filtered <- st %>%
+        dplyr::mutate(act = "No matching Acts", act_category = "none")
+    }
+    
+    lat_col <- 'latitude'; lon_col <- 'longitude'
+    if (all(c('lat','lon') %in% names(st_filtered))) { lat_col <- 'lat'; lon_col <- 'lon' }
+    
+    st2 <- st_filtered %>%
+      dplyr::filter(!is.na(.data[[lat_col]]), !is.na(.data[[lon_col]])) %>%
+      dplyr::mutate(
+        lat = as.numeric(.data[[lat_col]]), 
+        lon = as.numeric(.data[[lon_col]]),
+        marker_color = dplyr::case_when(
+          act_category == "1864" ~ "#e74c3c",
+          act_category == "1868" ~ "#3498db",
+          act_category == "1880" ~ "#9b59b6",
+          act_category == "1889" ~ "#f39c12",
+          act_category == "voluntary" ~ "#27ae60",
+          TRUE ~ "#95a5a6"
+        )
+      )
+    
+    # Use leafletProxy to update only the markers without re-rendering the map
+    leafletProxy("story_map_overview", data = st2) %>%
+      clearMarkers() %>%
       addCircleMarkers(
         ~lon, ~lat,
         radius = 6,
-        color = "#e74c3c",
+        color = ~marker_color,
+        fillColor = ~marker_color,
         fillOpacity = 0.7,
         stroke = TRUE,
         weight = 1,
-        popup = ~paste0("<b>", name, "</b><br>Region: ", region)
+        popup = ~paste0("<b>", name, "</b><br>Region: ", region, "<br>Act: ", ifelse(is.na(act) | act == "", "None", act))
       )
   })
   

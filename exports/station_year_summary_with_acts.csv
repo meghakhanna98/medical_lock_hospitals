@@ -1,0 +1,335 @@
+station,year,avg_registered,women_added,women_removed,disease_primary_syphilis,disease_secondary_syphilis,disease_gonorrhoea,disease_leucorrhoea,fined_count,imprisonment_count,act,region,country,latitude,longitude
+Akyab,1873,59.0,18,0,0,0,0,0,0,0,"Contagious Diseases Act 1868","British Burma Division","British Burma",20.1333,92.9
+Bassein,1873,14.0,10,0,0,0,0,0,0,0,"Contagious Diseases Act 1868","British Burma Division","British Burma",19.37871,72.8277653
+Moulmein,1873,119.0,62,0,0,0,0,0,0,0,"Contagious Diseases Act 1868","British Burma Division","British Burma",18.9800531,72.8363548
+Prome,1873,59.0,26,0,0,0,0,0,0,0,"Contagious Diseases Act 1868","British Burma Division","British Burma",25.1037552,89.0225188
+Rangoon,1873,438.0,232,0,0,0,0,0,0,0,"Cantonment Act 1864","British Burma Division","British Burma",16.7967129,96.1609916
+Thayetmyo,1873,20.5,9,0,0,0,0,0,0,0,"Cantonment Act 1864","British Burma Division","British Burma",19.322,95.1914
+Akyab,1875,64.0,28,0,0,0,0,0,0,0,"Contagious Diseases Act 1868","British Burma Division","British Burma",20.1333,92.9
+Bassein,1875,17.0,6,0,0,0,0,0,0,0,"Contagious Diseases Act 1868","British Burma Division","British Burma",19.37871,72.8277653
+Moulmein,1875,111.5,53,0,0,0,0,0,0,0,"Contagious Diseases Act 1868","British Burma Division","British Burma",18.9800531,72.8363548
+Prome,1875,35.0,20,0,0,0,0,0,0,0,"Contagious Diseases Act 1868","British Burma Division","British Burma",25.1037552,89.0225188
+Rangoon,1875,498.0,284,0,0,0,0,0,0,0,"Cantonment Act 1864","British Burma Division","British Burma",16.7967129,96.1609916
+Thayetmyo,1875,23.5,11,0,0,0,0,0,0,0,"Cantonment Act 1864","British Burma Division","British Burma",19.322,95.1914
+Toungoo,1875,16.0,10,0,0,0,0,0,0,0,"Cantonment Act 1864; Lock-Hospital Rules","British Burma Division","British Burma",18.9369,96.4348
+Akyab,1876,64.0,28,0,0,0,0,0,0,0,"Contagious Diseases Act 1868","British Burma Division","British Burma",20.1333,92.9
+Bassein,1876,17.0,6,0,0,0,0,0,0,0,"Contagious Diseases Act 1868","British Burma Division","British Burma",19.37871,72.8277653
+Henzada,1876,16.5,17,0,0,0,0,0,0,0,"Contagious Diseases Act 1868","British Burma Division","British Burma",17.6489,95.4616
+Kamptee,1876,120.8,93,0,0,0,0,0,0,0,"Cantonment Act 1864","Madras Presidency","British India",21.2170645,79.1964178
+Madras,1876,0.0,,0,0,0,0,0,0,0,"Act XIV of 1868","Madras Presidency (Civil)","British India",13.0836939,80.270186
+Moulmein,1876,111.5,53,0,0,0,0,0,0,0,"Contagious Diseases Act 1868","British Burma Division","British Burma",18.9800531,72.8363548
+Nagpur,1876,26.0,20,0,0,0,0,0,0,0,"Act XXII of 1864","Central Provinces","British India",21.1458,79.0882
+Nagpur,1876,26.0,20,0,0,0,0,0,0,0,"Contagious Diseases Act 1868","Central Provinces","British India",21.1458,79.0882
+Prome,1876,35.0,20,0,0,0,0,0,0,0,"Contagious Diseases Act 1868","British Burma Division","British Burma",25.1037552,89.0225188
+Rangoon,1876,498.0,284,0,0,0,0,0,0,0,"Cantonment Act 1864; Lock-Hospital Rules","British Burma Division","British Burma",16.7967129,96.1609916
+Thayetmyo,1876,23.5,11,0,0,0,0,0,0,0,"Cantonment Act 1864; Lock-Hospital Rules","British Burma Division","British Burma",19.322,95.1914
+Tonghoo,1876,0.0,,0,0,0,0,0,0,0,"Cantonment Act 1864; Lock-Hospital Rules","British Burma Division","British Burma",18.9369,96.4348
+Toungoo,1876,16.0,10,0,0,0,0,0,0,0,"Cantonment Act 1864; Lock-Hospital Rules","British Burma Division","British Burma",18.9369,96.4348
+Akyab,1877,67.0,44,0,0,0,0,0,0,0,"Contagious Diseases Act 1868","British Burma Division","British Burma",20.1333,92.9
+Bangalore,1877,41.0,82,0,0,0,0,0,0,0,"Cantonment Act 1864","Madras Presidency","British India",13.0613607,80.1396767
+Bassein,1877,26.0,22,0,0,0,0,0,0,0,"Contagious Diseases Act 1868","British Burma Division","British Burma",19.37871,72.8277653
+Bellary,1877,49.5,99,0,0,0,0,0,0,0,"Cantonment Act 1864","Madras Presidency","British India",15.1430224,76.9173277
+Cannanore,1877,49.0,,0,0,0,0,0,0,0,"Cantonment Act 1864","Madras Presidency","British India",11.8763836,75.3737973
+Henzada,1877,16.5,17,0,0,0,0,0,0,0,"Contagious Diseases Act 1868","British Burma Division","British Burma",17.6489,95.4616
+Kamptee,1877,71.5,13,0,0,0,0,0,0,0,"Cantonment Act 1864","Madras Presidency","British India",21.2170645,79.1964178
+Madras,1877,0.0,,0,0,0,0,0,0,0,"Cantonment Act 1864","Madras Presidency (Civil)","British India",13.0836939,80.270186
+Moulmein,1877,86.5,39,0,0,0,0,0,0,0,"Contagious Diseases Act 1868","British Burma Division","British Burma",18.9800531,72.8363548
+Nagpur,1877,17.5,3,0,0,0,0,0,0,0,"Act XXII of 1864","Central Provinces","British India",21.1458,79.0882
+Nagpur,1877,17.5,3,0,0,0,0,0,0,0,"Cantonment Act 1864","Central Provinces","British India",21.1458,79.0882
+Rangoon,1877,585.5,239,0,0,0,0,0,0,0,"Cantonment Act 1864","British Burma Division","British Burma",16.7967129,96.1609916
+Secunderabad,1877,0.0,,0,0,0,0,0,0,0,"Cantonment Act 1864","Madras Presidency","British India",17.4337246,78.5006827
+Seetabuldee,1877,0.0,,0,0,0,0,0,0,0,,"Madras Presidency","British India",21.1458,79.0882
+"St. Thomas' Mount",1877,0.0,,0,0,0,0,0,0,0,"Act XIV of 1868","Madras Presidency","British India",12.9947654,80.1993715
+Thayetmyo,1877,36.0,34,0,0,0,0,0,0,0,"Contagious Diseases Act 1868","British Burma Division","British Burma",19.322,95.1914
+Tonghoo,1877,0.0,,0,0,0,0,0,0,0,"Contagious Diseases Act 1868","British Burma Division","British Burma",18.9369,96.4348
+Toungoo,1877,15.0,,0,0,0,0,0,0,0,"Contagious Diseases Act 1868","British Burma Division","British Burma",18.9369,96.4348
+Trichinopoly,1877,0.0,,0,0,0,0,0,0,0,"Cantonment Act 1864","Madras Presidency","British India",10.8071144,78.6880939
+Wellington,1877,0.0,,0,0,0,0,0,0,0,"Cantonment Act 1864","Madras Presidency","British India",11.3560782,76.7861039
+Agra,1878,0.0,,0,0,0,0,0,0,0,"Act XXII of 1864","North-Western Provinces & Oudh","British India",27.1752554,78.0098161
+Akyab,1878,88.5,47,0,0,0,0,0,0,0,"Contagious Diseases Act 1868","British Burma Division","British Burma",20.1333,92.9
+Allahabad,1878,0.0,,0,0,0,0,0,0,0,"Act XXII of 1864","North-Western Provinces & Oudh","British India",25.4381302,81.8338005
+Bangalore,1878,32.0,64,0,0,0,0,0,0,0,"Cantonment Act 1864","Madras Presidency","British India",13.0613607,80.1396767
+Bareilly,1878,0.0,,0,0,0,0,0,0,0,"Act XXII of 1864","North-Western Provinces & Oudh","British India",28.4582344,79.4047452
+Bassein,1878,30.5,17,0,0,0,0,0,0,0,"Contagious Diseases Act 1868","British Burma Division","British Burma",19.37871,72.8277653
+Bellary,1878,46.5,93,0,0,0,0,0,0,0,"Cantonment Act 1864","Madras Presidency","British India",15.1430224,76.9173277
+Benares,1878,0.0,,0,0,0,0,0,0,0,"Act XXII of 1864","North-Western Provinces & Oudh","British India",25.3356491,83.0076292
+Cannanore,1878,7.0,14,0,0,0,0,0,0,0,"Cantonment Act 1864","Madras Presidency","British India",11.8763836,75.3737973
+Cawnpore,1878,0.0,,0,0,0,0,0,0,0,"Act XXII of 1864","North-Western Provinces & Oudh","British India",26.4609135,80.3217588
+Chakrata,1878,0.0,,0,0,0,0,0,0,0,"Act XXII of 1864","North-Western Provinces & Oudh","British India",30.7013248,77.8703356
+Fyzabad,1878,0.0,,0,0,0,0,0,0,0,"Act XXII of 1864","North-Western Provinces & Oudh","British India",26.7755,82.15
+Henzada,1878,24.5,17,0,0,0,0,0,0,0,"Contagious Diseases Act 1868","British Burma Division","British Burma",17.6489,95.4616
+Jhansi,1878,0.0,,0,0,0,0,0,0,0,"Act XXII of 1864","North-Western Provinces & Oudh","British India",25.529855,78.6527802
+Kamptee,1878,16.5,33,0,0,0,0,0,0,0,"Cantonment Act 1864","Madras Presidency","British India",21.2170645,79.1964178
+Lucknow,1878,0.0,,0,0,0,0,0,0,0,"Act XXII of 1864","North-Western Provinces & Oudh","British India",26.8381,80.9346001
+Madras,1878,0.0,,0,0,0,0,0,0,0,"Contagious Diseases Act 1868","Madras Presidency (Civil)","British India",13.0836939,80.270186
+Meerut,1878,0.0,,0,0,0,0,0,0,0,"Act XXII of 1864","North-Western Provinces & Oudh","British India",29.0018557,77.7679671
+Moradabad,1878,0.0,,0,0,0,0,0,0,0,"Act XXII of 1864","North-Western Provinces & Oudh","British India",28.8796553,78.8095335
+Moulmein,1878,68.0,38,0,0,0,0,0,0,0,"Contagious Diseases Act 1868","British Burma Division","British Burma",18.9800531,72.8363548
+Muttra,1878,0.0,,0,0,0,0,0,0,0,"Act XXII of 1864","North-Western Provinces & Oudh","British India",27.4924,77.6737
+"Naini Tal",1878,0.0,,0,0,0,0,0,0,0,"Act XXII of 1864","North-Western Provinces & Oudh","British India",29.3905295,79.460869
+Prome,1878,45.0,58,0,0,0,0,0,0,0,"Contagious Diseases Act 1868","British Burma Division","British Burma",25.1037552,89.0225188
+Rangoon,1878,547.0,280,0,0,0,0,0,0,0,"Contagious Diseases Act 1868","British Burma Division","British Burma",16.7967129,96.1609916
+Roorkee,1878,0.0,,0,0,0,0,0,0,0,"Act XXII of 1864","North-Western Provinces & Oudh","British India",29.8693496,77.8902124
+Secunderabad,1878,0.0,,0,0,0,0,0,0,0,"Cantonment Act 1864","Madras Presidency","British India",17.4337246,78.5006827
+Seetabuldee,1878,0.0,,0,0,0,0,0,0,0,,"Madras Presidency","British India",21.1458,79.0882
+Shahjahanpur,1878,0.0,,0,0,0,0,0,0,0,"Act XXII of 1864","North-Western Provinces & Oudh","British India",27.9128583,79.7476254
+Sitapur,1878,0.0,,0,0,0,0,0,0,0,"Act XXII of 1864","North-Western Provinces & Oudh","British India",27.5026747,80.8335139
+"St. Thomas' Mount",1878,0.0,,0,0,0,0,0,0,0,"Cantonment Act 1864","Madras Presidency","British India",12.9947654,80.1993715
+Thayetmyo,1878,34.5,23,0,0,0,0,0,0,0,"Contagious Diseases Act 1868","British Burma Division","British Burma",19.322,95.1914
+Tonghoo,1878,0.0,,0,0,0,0,0,0,0,"Contagious Diseases Act 1868","British Burma Division","British Burma",18.9369,96.4348
+Toungoo,1878,13.5,7,0,0,0,0,0,0,0,"Contagious Diseases Act 1868","British Burma Division","British Burma",18.9369,96.4348
+Trichinopoly,1878,0.0,,0,0,0,0,0,0,0,"Cantonment Act 1864","Madras Presidency","British India",10.8071144,78.6880939
+Wellington,1878,0.0,,0,0,0,0,0,0,0,"Cantonment Act 1864","Madras Presidency","British India",11.3560782,76.7861039
+Agra,1879,120.5,241,0,0,0,0,0,0,0,"Contagious Diseases Act 1868","North-Western Provinces & Oudh","British India",27.1752554,78.0098161
+Allahabad,1879,213.0,86,0,0,0,0,0,0,0,"Contagious Diseases Act 1868","North-Western Provinces & Oudh","British India",25.4381302,81.8338005
+Bangalore,1879,35.0,70,0,0,0,0,0,0,0,"Cantonment Act 1864","Madras Presidency","British India",13.0613607,80.1396767
+Bareilly,1879,54.5,109,0,0,0,0,0,0,0,"Contagious Diseases Act 1868","North-Western Provinces & Oudh","British India",28.4582344,79.4047452
+Bassein,1879,40.0,36,0,0,0,0,0,0,0,"Contagious Diseases Act 1868","British Burma Division","British Burma",19.37871,72.8277653
+Bellary,1879,44.0,88,0,0,0,0,0,0,0,"Cantonment Act 1864","Madras Presidency","British India",15.1430224,76.9173277
+Benares,1879,59.0,118,0,0,0,0,0,0,0,"Contagious Diseases Act 1868","North-Western Provinces & Oudh","British India",25.3356491,83.0076292
+Cannanore,1879,0.0,,0,0,0,0,0,0,0,"Cantonment Act 1864","Madras Presidency","British India",11.8763836,75.3737973
+Cawnpore,1879,122.5,245,0,0,0,0,0,0,0,"Contagious Diseases Act 1868","North-Western Provinces & Oudh","British India",26.4609135,80.3217588
+Fyzabad,1879,65.5,131,0,0,0,0,0,0,0,"Contagious Diseases Act 1868","North-Western Provinces & Oudh","British India",26.7755,82.15
+Kamptee,1879,15.5,31,0,0,0,0,0,0,0,"Cantonment Act 1864","Madras Presidency","British India",21.2170645,79.1964178
+Lucknow,1879,355.0,52,0,0,0,0,0,0,0,"Contagious Diseases Act 1868","North-Western Provinces & Oudh","British India",26.8381,80.9346001
+Madras,1879,0.0,,0,0,0,0,0,0,0,"Contagious Diseases Act 1868","Madras Presidency (Civil)","British India",13.0836939,80.270186
+Meerut,1879,89.5,179,0,0,0,0,0,0,0,"Contagious Diseases Act 1868","North-Western Provinces & Oudh","British India",29.0018557,77.7679671
+Moradabad,1879,41.5,83,0,0,0,0,0,0,0,"Contagious Diseases Act 1868","North-Western Provinces & Oudh","British India",28.8796553,78.8095335
+Moulmein,1879,75.0,42,0,0,0,0,0,0,0,"Contagious Diseases Act 1868","British Burma Division","British Burma",18.9800531,72.8363548
+Prome,1879,31.0,12,0,0,0,0,0,0,0,"Contagious Diseases Act 1868","British Burma Division","British Burma",25.1037552,89.0225188
+Rangoon,1879,556.0,222,0,0,0,0,0,0,0,"Contagious Diseases Act 1868","British Burma Division","British Burma",16.7967129,96.1609916
+Saugor,1879,76.0,18,0,0,0,0,0,0,0,"Act XXII of 1864","Central Provinces","British India",23.8083076,78.758254
+Secunderabad,1879,0.0,,0,0,0,0,0,0,0,"Cantonment Act 1864","Madras Presidency","British India",17.4337246,78.5006827
+Seetabuldee,1879,0.0,,0,0,0,0,0,0,0,,"Madras Presidency","British India",21.1458,79.0882
+Shahjahanpur,1879,36.0,72,0,0,0,0,0,0,0,"Contagious Diseases Act 1868","North-Western Provinces & Oudh","British India",27.9128583,79.7476254
+"St. Thomas' Mount",1879,0.0,,0,0,0,0,0,0,0,"Cantonment Act 1864","Madras Presidency","British India",12.9947654,80.1993715
+Thayetmyo,1879,31.5,25,0,0,0,0,0,0,0,"Contagious Diseases Act 1868","British Burma Division","British Burma",19.322,95.1914
+Tonghoo,1879,0.0,,0,0,0,0,0,0,0,"Contagious Diseases Act 1868","British Burma Division","British Burma",18.9369,96.4348
+Trichinopoly,1879,0.0,,0,0,0,0,0,0,0,"Cantonment Act 1864","Madras Presidency","British India",10.8071144,78.6880939
+Wellington,1879,0.0,,0,0,0,0,0,0,0,"Cantonment Act 1864","Madras Presidency","British India",11.3560782,76.7861039
+Agra,1880,214.3,196,0,0,0,0,0,0,0,"Act III of 1880","North-Western Provinces & Oudh","British India",27.1752554,78.0098161
+Akyab,1880,64.0,38,0,0,0,0,0,0,0,"Contagious Diseases Act 1868","British Burma Division","British Burma",20.1333,92.9
+Allahabad,1880,253.5,193,0,0,0,0,0,0,0,"Act III of 1880","North-Western Provinces & Oudh","British India",25.4381302,81.8338005
+Bangalore,1880,0.0,,0,0,0,0,0,0,0,"Cantonment Act 1864","Madras Presidency","British India",13.0613607,80.1396767
+Bareilly,1880,220.8,205,0,0,0,0,0,0,0,"Act III of 1880","North-Western Provinces & Oudh","British India",28.4582344,79.4047452
+Bassein,1880,40.0,16,0,0,0,0,0,0,0,"Contagious Diseases Act 1868","British Burma Division","British Burma",19.37871,72.8277653
+Bellary,1880,0.0,,0,0,0,0,0,0,0,"Cantonment Act 1864","Madras Presidency","British India",15.1430224,76.9173277
+Benares,1880,118.8,100,0,0,0,0,0,0,0,"Act III of 1880","North-Western Provinces & Oudh","British India",25.3356491,83.0076292
+Cannanore,1880,65.0,20,0,0,0,0,0,0,0,"Cantonment Act 1864","Madras Presidency","British India",11.8763836,75.3737973
+Cawnpore,1880,245.5,209,0,0,0,0,0,0,0,"Act III of 1880","North-Western Provinces & Oudh","British India",26.4609135,80.3217588
+Chakrata,1880,25.0,22,0,0,0,0,0,0,0,"Act III of 1880","North-Western Provinces & Oudh","British India",30.7013248,77.8703356
+Fatehgarh,1880,47.5,41,0,0,0,0,0,0,0,"Act III of 1880","North-Western Provinces & Oudh","British India",27.3700748,79.620752
+Fyzabad,1880,143.1,106,0,0,0,0,0,0,0,"Act III of 1880","North-Western Provinces & Oudh","British India",26.7755,82.15
+Jhansi,1880,48.5,49,0,0,0,0,0,0,0,"Act III of 1880","North-Western Provinces & Oudh","British India",25.529855,78.6527802
+Kamptee,1880,0.0,,0,0,0,0,0,0,0,"Cantonment Act 1864","Madras Presidency","British India",21.2170645,79.1964178
+Lucknow,1880,172.0,154,0,0,0,0,0,0,0,"Act III of 1880","North-Western Provinces & Oudh","British India",26.8381,80.9346001
+Madras,1880,0.0,,0,0,0,0,0,0,0,"Contagious Diseases Act 1868","Madras Presidency (Civil)","British India",13.0836939,80.270186
+Meerut,1880,177.0,150,0,0,0,0,0,0,0,"Act III of 1880","North-Western Provinces & Oudh","British India",29.0018557,77.7679671
+Moradabad,1880,109.3,83,0,0,0,0,0,0,0,"Act III of 1880","North-Western Provinces & Oudh","British India",28.8796553,78.8095335
+Moulmein,1880,90.0,24,0,0,0,0,0,0,0,"Contagious Diseases Act 1868","British Burma Division","British Burma",18.9800531,72.8363548
+Muttra,1880,22.0,18,0,0,0,0,0,0,0,"Act III of 1880","North-Western Provinces & Oudh","British India",27.4924,77.6737
+"Naini Tal",1880,39.5,31,0,0,0,0,0,0,0,"Act III of 1880","North-Western Provinces & Oudh","British India",29.3905295,79.460869
+Prome,1880,10.5,7,0,0,0,0,0,0,0,"Contagious Diseases Act 1868","British Burma Division","British Burma",25.1037552,89.0225188
+Rangoon,1880,596.5,241,0,0,0,0,0,0,0,"Contagious Diseases Act 1868","British Burma Division","British Burma",16.7967129,96.1609916
+Ranikhet,1880,72.5,63,0,0,0,0,0,0,0,"Act III of 1880","North-Western Provinces & Oudh","British India",29.6323007,79.4154142
+Roorkee,1880,48.0,42,0,0,0,0,0,0,0,"Act III of 1880","North-Western Provinces & Oudh","British India",29.8693496,77.8902124
+Secunderabad,1880,0.0,,0,0,0,0,0,0,0,"Cantonment Act 1864","Madras Presidency","British India",17.4337246,78.5006827
+Shahjahanpur,1880,82.5,79,0,0,0,0,0,0,0,"Act III of 1880","North-Western Provinces & Oudh","British India",27.9128583,79.7476254
+Sitapur,1880,84.0,74,0,0,0,0,0,0,0,"Act III of 1880","North-Western Provinces & Oudh","British India",27.5026747,80.8335139
+"St. Thomas' Mount",1880,0.0,,0,0,0,0,0,0,0,"Cantonment Act 1864","Madras Presidency","British India",12.9947654,80.1993715
+Thayetmyo,1880,40.0,24,0,0,0,0,0,0,0,"Contagious Diseases Act 1868","British Burma Division","British Burma",19.322,95.1914
+Toungoo,1880,23.5,17,0,0,0,0,0,0,0,"Contagious Diseases Act 1868","British Burma Division","British Burma",18.9369,96.4348
+Trichinopoly,1880,0.0,,0,0,0,0,0,0,0,"Cantonment Act 1864","Madras Presidency","British India",10.8071144,78.6880939
+Wellington,1880,0.0,,0,0,0,0,0,0,0,"Cantonment Act 1864","Madras Presidency","British India",11.3560782,76.7861039
+Agra,1881,244.3,227,0,0,0,0,0,0,0,"Act III of 1880","North-Western Provinces & Oudh","British India",27.1752554,78.0098161
+Allahabad,1881,225.7,177,0,0,0,0,0,0,0,"Act III of 1880","North-Western Provinces & Oudh","British India",25.4381302,81.8338005
+Bangalore,1881,0.0,,0,0,0,0,0,0,0,"Cantonment Act 1864","Madras Presidency","British India",13.0613607,80.1396767
+Bareilly,1881,215.7,205,0,0,0,0,0,0,0,"Act III of 1880","North-Western Provinces & Oudh","British India",28.4582344,79.4047452
+Bassein,1881,34.5,15,0,0,0,0,0,0,0,"Contagious Diseases Act 1868","British Burma Division","British Burma",19.37871,72.8277653
+Bellary,1881,0.0,,0,0,0,0,0,0,0,"Cantonment Act 1864","Madras Presidency","British India",15.1430224,76.9173277
+Benares,1881,93.8,76,0,0,0,0,0,0,0,"Act III of 1880","North-Western Provinces & Oudh","British India",25.3356491,83.0076292
+Cannanore,1881,0.0,,0,0,0,0,0,0,0,"Cantonment Act 1864","Madras Presidency","British India",11.8763836,75.3737973
+Cawnpore,1881,189.3,162,0,0,0,0,0,0,0,"Act III of 1880","North-Western Provinces & Oudh","British India",26.4609135,80.3217588
+Chakrata,1881,35.5,35,0,0,0,0,0,0,0,"Act III of 1880","North-Western Provinces & Oudh","British India",30.7013248,77.8703356
+Fatehgarh,1881,44.0,42,0,0,0,0,0,0,0,"Act III of 1880","North-Western Provinces & Oudh","British India",27.3700748,79.620752
+Fyzabad,1881,121.1,90,0,0,0,0,0,0,0,"Act III of 1880","North-Western Provinces & Oudh","British India",26.7755,82.15
+Jhansi,1881,29.31,28,0,0,0,0,0,0,0,"Act III of 1880","North-Western Provinces & Oudh","British India",25.529855,78.6527802
+Kamptee,1881,0.0,,0,0,0,0,0,0,0,"Cantonment Act 1864","Madras Presidency","British India",21.2170645,79.1964178
+Lucknow,1881,134.0,94,0,0,0,0,0,0,0,"Act III of 1880","North-Western Provinces & Oudh","British India",26.8381,80.9346001
+Meerut,1881,170.67,152,0,0,0,0,0,0,0,"Act III of 1880","North-Western Provinces & Oudh","British India",29.0018557,77.7679671
+Moradabad,1881,120.4,106,0,0,0,0,0,0,0,"Act III of 1880","North-Western Provinces & Oudh","British India",28.8796553,78.8095335
+Moulmein,1881,63.5,25,0,0,0,0,0,0,0,"Contagious Diseases Act 1868","British Burma Division","British Burma",18.9800531,72.8363548
+Muttra,1881,25.7,30,0,0,0,0,0,0,0,"Act III of 1880","North-Western Provinces & Oudh","British India",27.4924,77.6737
+"Naini Tal",1881,47.88,42,0,0,0,0,0,0,0,"Act III of 1880","North-Western Provinces & Oudh","British India",29.3905295,79.460869
+Ranikhet,1881,87.2,73,0,0,0,0,0,0,0,"Act III of 1880","North-Western Provinces & Oudh","British India",29.6323007,79.4154142
+Roorkee,1881,62.75,57,0,0,0,0,0,0,0,"Act III of 1880","North-Western Provinces & Oudh","British India",29.8693496,77.8902124
+Secunderabad,1881,0.0,,0,0,0,0,0,0,0,"Cantonment Act 1864","Madras Presidency","British India",17.4337246,78.5006827
+Shahjahanpur,1881,84.03,85,0,0,0,0,0,0,0,"Act III of 1880","North-Western Provinces & Oudh","British India",27.9128583,79.7476254
+Sitapur,1881,93.8,80,0,0,0,0,0,0,0,"Act III of 1880","North-Western Provinces & Oudh","British India",27.5026747,80.8335139
+"St. Thomas' Mount",1881,0.0,,0,0,0,0,0,0,0,"Cantonment Act 1864","Madras Presidency","British India",12.9947654,80.1993715
+Thayetmyo,1881,35.5,23,0,0,0,0,0,0,0,"Contagious Diseases Act 1868","British Burma Division","British Burma",19.322,95.1914
+Toungoo,1881,22.5,11,0,0,0,0,0,0,0,"Contagious Diseases Act 1868","British Burma Division","British Burma",18.9369,96.4348
+Wellington,1881,0.0,,0,0,0,0,0,0,0,"Cantonment Act 1864","Madras Presidency","British India",11.3560782,76.7861039
+Agra,1882,225.61,199,0,0,0,0,0,0,0,"Act III of 1880","North-Western Provinces & Oudh","British India",27.1752554,78.0098161
+Allahabad,1882,167.58,134,0,0,0,0,0,0,0,"Act III of 1880","North-Western Provinces & Oudh","British India",25.4381302,81.8338005
+Bangalore,1882,94.0,18,0,0,0,0,0,0,0,"Cantonment Act 1864","Madras Presidency","British India",13.0613607,80.1396767
+Bareilly,1882,191.75,166,0,0,0,0,0,0,0,"Act III of 1880","North-Western Provinces & Oudh","British India",28.4582344,79.4047452
+Bassein,1882,41.5,19,0,0,0,0,0,0,0,"Contagious Diseases Act 1868","British Burma Division","British Burma",19.37871,72.8277653
+Bellary,1882,88.5,27,0,0,0,0,0,0,0,"Cantonment Act 1864","Madras Presidency","British India",15.1430224,76.9173277
+Benares,1882,77.0,74,0,0,0,0,0,0,0,"Act III of 1880","North-Western Provinces & Oudh","British India",25.3356491,83.0076292
+Cannanore,1882,42.5,19,0,0,0,0,0,0,0,"Cantonment Act 1864","Madras Presidency","British India",11.8763836,75.3737973
+Cawnpore,1882,180.3,156,0,0,0,0,0,0,0,"Act III of 1880","North-Western Provinces & Oudh","British India",26.4609135,80.3217588
+Chakrata,1882,51.5,42,0,0,0,0,0,0,0,"Act III of 1880","North-Western Provinces & Oudh","British India",30.7013248,77.8703356
+Fatehgarh,1882,63.19,56,0,0,0,0,0,0,0,"Act III of 1880","North-Western Provinces & Oudh","British India",27.3700748,79.620752
+Fyzabad,1882,124.1,97,0,0,0,0,0,0,0,"Act III of 1880","North-Western Provinces & Oudh","British India",26.7755,82.15
+Jhansi,1882,25.71,23,0,0,0,0,0,0,0,"Act III of 1880","North-Western Provinces & Oudh","British India",25.529855,78.6527802
+Kamptee,1882,58.5,1,0,0,0,0,0,0,0,"Cantonment Act 1864","Madras Presidency","British India",21.2170645,79.1964178
+Lucknow,1882,146.57,130,0,0,0,0,0,0,0,"Act III of 1880","North-Western Provinces & Oudh","British India",26.8381,80.9346001
+Madras,1882,0.0,,0,0,0,0,0,0,0,"Contagious Diseases Act 1868","Madras Presidency (Civil)","British India",13.0836939,80.270186
+Meerut,1882,139.43,132,0,0,0,0,0,0,0,"Act III of 1880","North-Western Provinces & Oudh","British India",29.0018557,77.7679671
+Moradabad,1882,113.85,93,0,0,0,0,0,0,0,"Act III of 1880","North-Western Provinces & Oudh","British India",28.8796553,78.8095335
+Moulmein,1882,77.0,28,0,0,0,0,0,0,0,"Contagious Diseases Act 1868","British Burma Division","British Burma",18.9800531,72.8363548
+Muttra,1882,47.41,43,0,0,0,0,0,0,0,"Act III of 1880","North-Western Provinces & Oudh","British India",27.4924,77.6737
+"Naini Tal",1882,46.4,42,0,0,0,0,0,0,0,"Act III of 1880","North-Western Provinces & Oudh","British India",29.3905295,79.460869
+Prome,1882,14.0,2,0,0,0,0,0,0,0,"Contagious Diseases Act 1868","British Burma Division","British Burma",25.1037552,89.0225188
+Rangoon,1882,639.5,209,0,0,0,0,0,0,0,"Contagious Diseases Act 1868","British Burma Division","British Burma",16.7967129,96.1609916
+Roorkee,1882,50.66,45,0,0,0,0,0,0,0,"Act III of 1880","North-Western Provinces & Oudh","British India",29.8693496,77.8902124
+Secunderabad,1882,0.0,,0,0,0,0,0,0,0,"Cantonment Act 1864","Madras Presidency","British India",17.4337246,78.5006827
+Shahjahanpur,1882,72.95,68,0,0,0,0,0,0,0,"Act III of 1880","North-Western Provinces & Oudh","British India",27.9128583,79.7476254
+Sitapur,1882,99.51,92,0,0,0,0,0,0,0,"Act III of 1880","North-Western Provinces & Oudh","British India",27.5026747,80.8335139
+"St. Thomas' Mount",1882,0.0,,0,0,0,0,0,0,0,"Cantonment Act 1864","Madras Presidency","British India",12.9947654,80.1993715
+Thayetmyo,1882,29.5,19,0,0,0,0,0,0,0,"Contagious Diseases Act 1868","British Burma Division","British Burma",19.322,95.1914
+Toungoo,1882,26.5,11,0,0,0,0,0,0,0,"Contagious Diseases Act 1868","British Burma Division","British Burma",18.9369,96.4348
+Wellington,1882,0.0,,0,0,0,0,0,0,0,"Cantonment Act 1864","Madras Presidency","British India",11.3560782,76.7861039
+Akyab,1883,44.0,,0,0,0,0,0,0,0,"Contagious Diseases Act 1868","British Burma Division","British Burma",20.1333,92.9
+Bangalore,1883,0.0,,0,0,0,0,0,0,0,"Cantonment Act 1864","Madras Presidency","British India",13.0613607,80.1396767
+Bassein,1883,26.0,,0,0,0,0,0,0,0,"Contagious Diseases Act 1868","British Burma Division","British Burma",19.37871,72.8277653
+Bellary,1883,0.0,,0,0,0,0,0,0,0,"Cantonment Act 1864","Madras Presidency","British India",15.1430224,76.9173277
+Cannanore,1883,0.0,,0,0,0,0,0,0,0,"Cantonment Act 1864","Madras Presidency","British India",11.8763836,75.3737973
+Kamptee,1883,0.0,,0,0,0,0,0,0,0,"Cantonment Act 1864","Madras Presidency","British India",21.2170645,79.1964178
+Madras,1883,0.0,,0,0,0,0,0,0,0,"Contagious Diseases Act 1868","Madras Presidency (Civil)","British India",13.0836939,80.270186
+Moulmein,1883,61.0,,0,0,0,0,0,0,0,"Contagious Diseases Act 1868","British Burma Division","British Burma",18.9800531,72.8363548
+Rangoon,1883,466.0,,0,0,0,0,0,0,0,"Contagious Diseases Act 1868","British Burma Division","British Burma",16.7967129,96.1609916
+Secunderabad,1883,0.0,,0,0,0,0,0,0,0,"Cantonment Act 1864","Madras Presidency","British India",17.4337246,78.5006827
+"St. Thomas' Mount",1883,0.0,,0,0,0,0,0,0,0,"Cantonment Act 1864","Madras Presidency","British India",12.9947654,80.1993715
+Thayetmyo,1883,31.0,,0,0,0,0,0,0,0,"Contagious Diseases Act 1868","British Burma Division","British Burma",19.322,95.1914
+Toungoo,1883,15.0,,0,0,0,0,0,0,0,"Contagious Diseases Act 1868","British Burma Division","British Burma",18.9369,96.4348
+Wellington,1883,0.0,,0,0,0,0,0,0,0,"Cantonment Act 1864","Madras Presidency","British India",11.3560782,76.7861039
+Akyab,1884,55.0,22,0,0,0,0,0,0,0,"Contagious Diseases Act 1868","British Burma Division","British Burma",20.1333,92.9
+Bangalore,1884,0.0,,0,0,0,0,0,0,0,"Cantonment Act 1864","Madras Presidency","British India",13.0613607,80.1396767
+Bassein,1884,35.5,19,0,0,0,0,0,0,0,"Contagious Diseases Act 1868","British Burma Division","British Burma",19.37871,72.8277653
+Bellary,1884,0.0,,0,0,0,0,0,0,0,"Cantonment Act 1864","Madras Presidency","British India",15.1430224,76.9173277
+Cannanore,1884,0.0,,0,0,0,0,0,0,0,"Cantonment Act 1864","Madras Presidency","British India",11.8763836,75.3737973
+Kamptee,1884,0.0,,0,0,0,0,0,0,0,"Cantonment Act 1864","Madras Presidency","British India",21.2170645,79.1964178
+Madras,1884,0.0,,0,0,0,0,0,0,0,"Contagious Diseases Act 1868","Madras Presidency (Civil)","British India",13.0836939,80.270186
+Moulmein,1884,66.5,11,0,0,0,0,0,0,0,"Contagious Diseases Act 1868","British Burma Division","British Burma",18.9800531,72.8363548
+Rangoon,1884,566.0,200,0,0,0,0,0,0,0,"Contagious Diseases Act 1868","British Burma Division","British Burma",16.7967129,96.1609916
+Secunderabad,1884,0.0,,0,0,0,0,0,0,0,"Cantonment Act 1864","Madras Presidency","British India",17.4337246,78.5006827
+"St. Thomas' Mount",1884,0.0,,0,0,0,0,0,0,0,"Cantonment Act 1864","Madras Presidency","British India",12.9947654,80.1993715
+Thayetmyo,1884,37.5,13,0,0,0,0,0,0,0,"Contagious Diseases Act 1868","British Burma Division","British Burma",19.322,95.1914
+Toungoo,1884,23.5,17,0,0,0,0,0,0,0,"Contagious Diseases Act 1868","British Burma Division","British Burma",18.9369,96.4348
+Wellington,1884,0.0,,0,0,0,0,0,0,0,"Cantonment Act 1864","Madras Presidency","British India",11.3560782,76.7861039
+Akyab,1885,51.5,21,0,0,0,0,0,0,0,"Contagious Diseases Act 1868","British Burma Division","British Burma",20.1333,92.9
+Bangalore,1885,0.0,,0,0,0,0,0,0,0,"Cantonment Act 1864","Madras Presidency","British India",13.0613607,80.1396767
+Bassein,1885,32.5,19,0,0,0,0,0,0,0,"Contagious Diseases Act 1868","British Burma Division","British Burma",19.37871,72.8277653
+Bellary,1885,0.0,,0,0,0,0,0,0,0,"Cantonment Act 1864","Madras Presidency","British India",15.1430224,76.9173277
+Cannanore,1885,0.0,,0,0,0,0,0,0,0,"Cantonment Act 1864","Madras Presidency","British India",11.8763836,75.3737973
+Kamptee,1885,0.0,,0,0,0,0,0,0,0,"Cantonment Act 1864","Madras Presidency","British India",21.2170645,79.1964178
+Madras,1885,0.0,,0,0,0,0,0,0,0,"Contagious Diseases Act 1868","Madras Presidency (Civil)","British India",13.0836939,80.270186
+Rangoon,1885,472.5,219,0,0,0,0,0,0,0,"Contagious Diseases Act 1868","British Burma Division","British Burma",16.7967129,96.1609916
+Secunderabad,1885,0.0,,0,0,0,0,0,0,0,"Cantonment Act 1864","Madras Presidency","British India",17.4337246,78.5006827
+"St. Thomas' Mount",1885,0.0,,0,0,0,0,0,0,0,"Cantonment Act 1864","Madras Presidency","British India",12.9947654,80.1993715
+Thayetmyo,1885,38.0,20,0,0,0,0,0,0,0,"Contagious Diseases Act 1868","British Burma Division","British Burma",19.322,95.1914
+Toungoo,1885,30.0,24,0,0,0,0,0,0,0,"Contagious Diseases Act 1868","British Burma Division","British Burma",18.9369,96.4348
+Wellington,1885,0.0,,0,0,0,0,0,0,0,"Cantonment Act 1864","Madras Presidency","British India",11.3560782,76.7861039
+Akyab,1886,51.5,21,0,0,0,0,0,0,0,"Contagious Diseases Act 1868","British Burma Division","British Burma",20.1333,92.9
+Bangalore,1886,0.0,,0,0,0,0,0,0,0,"Cantonment Act 1864","Madras Presidency","British India",13.0613607,80.1396767
+Bassein,1886,33.5,17,0,0,0,0,0,0,0,"Contagious Diseases Act 1868","British Burma Division","British Burma",19.37871,72.8277653
+Belgaum,1886,0.0,,0,0,0,0,0,0,0,"Cantonment Act 1864","Madras Presidency","British India",15.8572666,74.5069343
+Bellary,1886,0.0,,0,0,0,0,0,0,0,"Cantonment Act 1864","Madras Presidency","British India",15.1430224,76.9173277
+Cannanore,1886,0.0,,0,0,0,0,0,0,0,"Cantonment Act 1864","Madras Presidency","British India",11.8763836,75.3737973
+Kamptee,1886,0.0,,0,0,0,0,0,0,0,"Cantonment Act 1864","Madras Presidency","British India",21.2170645,79.1964178
+Rangoon,1886,520.5,257,0,0,0,0,0,0,0,"Contagious Diseases Act 1868","British Burma Division","British Burma",16.7967129,96.1609916
+Secunderabad,1886,0.0,,0,0,0,0,0,0,0,"Cantonment Act 1864","Madras Presidency","British India",17.4337246,78.5006827
+"St. Thomas' Mount",1886,2.5,5,0,0,0,0,0,0,0,"Cantonment Act 1864","Madras Presidency","British India",12.9947654,80.1993715
+Thayetmyo,1886,41.5,25,0,0,0,0,0,0,0,"Contagious Diseases Act 1868","British Burma Division","British Burma",19.322,95.1914
+Toungoo,1886,29.0,22,0,0,0,0,0,0,0,"Contagious Diseases Act 1868","British Burma Division","British Burma",18.9369,96.4348
+Wellington,1886,0.0,,0,0,0,0,0,0,0,"Cantonment Act 1864","Madras Presidency","British India",11.3560782,76.7861039
+Attock,1887,0.0,,0,0,0,0,0,0,0,"Cantonment Act 1864",Punjab,"British India",33.7695323,72.3610911
+Bangalore,1887,0.0,,0,0,0,0,0,0,0,"Cantonment Act 1864","Madras Presidency","British India",13.0613607,80.1396767
+Belgaum,1887,0.0,,0,0,0,0,0,0,0,"Cantonment Act 1864","Madras Presidency","British India",15.8572666,74.5069343
+Bellary,1887,0.0,,0,0,0,0,0,0,0,"Cantonment Act 1864","Madras Presidency","British India",15.1430224,76.9173277
+Cannanore,1887,0.0,,0,0,0,0,0,0,0,"Cantonment Act 1864","Madras Presidency","British India",11.8763836,75.3737973
+Dagshai,1887,32.5,5,0,0,0,0,0,0,0,"Cantonment Act 1864",Punjab,"British India",30.8684273,77.0651484
+Dalhousie,1887,0.0,,0,0,0,0,0,0,0,"Cantonment Act 1864",Punjab,"British India",32.2730553,75.6739784
+Delhi,1887,86.5,21,0,0,0,0,0,0,0,"Cantonment Act 1864",Punjab,"British India",30.9587052,74.610057
+Ferozepore,1887,0.0,,0,0,0,0,0,0,0,"Cantonment Act 1864",Punjab,"British India",30.9911697,74.5518415
+Jullundur,1887,0.0,,0,0,0,0,0,0,0,"Cantonment Act 1880",Punjab,"British India",31.416667,75.616667
+Kamptee,1887,0.0,,0,0,0,0,0,0,0,"Cantonment Act 1864","Madras Presidency","British India",21.2170645,79.1964178
+Kasauli,1887,23.0,,0,0,0,0,0,0,0,"Cantonment Act 1864",Punjab,"British India",30.4415701,76.8447303
+Madras,1887,0.0,,0,0,0,0,0,0,0,"Contagious Diseases Act 1868","Madras Presidency (Civil)","British India",13.0836939,80.270186
+"Meean Meer",1887,0.0,,0,0,0,0,0,0,0,"Cantonment Act 1880",Punjab,"British India",31.5497,74.3436
+Mooltan,1887,0.0,,0,0,0,0,0,0,0,"Cantonment Act 1880",Punjab,"British India",30.1575,71.5249
+Murree,1887,0.0,,0,0,0,0,0,0,0,"Cantonment Act 1864",Punjab,"British India",33.9056829,73.392674
+Naushahra,1887,0.0,,0,0,0,0,0,0,0,"Cantonment Act 1864",Punjab,"British India",31.6853407,74.8985624
+Peshawar,1887,0.0,,0,0,0,0,0,0,0,"Cantonment Act 1864",Punjab,"British India",17.402817,78.4615197
+Rangoon,1887,0.0,,0,0,0,0,0,0,0,"Contagious Diseases Act 1868","British Burma Division","British Burma",16.7967129,96.1609916
+Rawalpindi,1887,0.0,,0,0,0,0,0,0,0,"Cantonment Act 1864",Punjab,"British India",31.2873363,75.792424
+Secunderabad,1887,0.0,,0,0,0,0,0,0,0,"Cantonment Act 1864","Madras Presidency","British India",17.4337246,78.5006827
+Sialkot,1887,0.0,,0,0,0,0,0,0,0,"Cantonment Act 1864",Punjab,"British India",32.4935378,74.5411575
+"St. Thomas' Mount",1887,0.0,,0,0,0,0,0,0,0,"Cantonment Act 1864","Madras Presidency","British India",12.9947654,80.1993715
+Subathu,1887,0.0,,0,0,0,0,0,0,0,"Cantonment Act 1864",Punjab,"British India",30.9768704,76.9946534
+Umballa,1887,95.0,20,0,0,0,0,0,0,0,"Cantonment Act 1864",Punjab,"British India",30.3607,76.7794
+Wellington,1887,0.0,,0,0,0,0,0,0,0,"Cantonment Act 1864","Madras Presidency","British India",11.3560782,76.7861039
+Attock,1888,0.0,,0,0,0,0,0,0,0,"Cantonment Act 1864",Punjab,"British India",33.7695323,72.3610911
+Bangalore,1888,0.0,,0,0,0,0,0,0,0,"Cantonment Act 1864","Madras Presidency","British India",13.0613607,80.1396767
+Belgaum,1888,0.0,,0,0,0,0,0,0,0,"Cantonment Act 1864","Madras Presidency","British India",15.8572666,74.5069343
+Bellary,1888,0.0,,0,0,0,0,0,0,0,"Cantonment Act 1864","Madras Presidency","British India",15.1430224,76.9173277
+Cannanore,1888,0.0,,0,0,0,0,0,0,0,"Cantonment Act 1864","Madras Presidency","British India",11.8763836,75.3737973
+Dagshai,1888,29.0,2,0,0,0,0,0,0,0,"Cantonment Act XXII of 1864; Act III of 1880",Punjab,"British India",30.8684273,77.0651484
+Dalhousie,1888,0.0,,0,0,0,0,0,0,0,"Contagious Diseases Act 1868",Punjab,"British India",32.2730553,75.6739784
+Delhi,1888,100.0,10,0,0,0,0,0,0,0,"Cantonment Act XXII of 1864; Act III of 1880; aligned with Act XIV of 1868 (regionally)",Punjab,"British India",30.9587052,74.610057
+Ferozepore,1888,0.0,,0,0,0,0,0,0,0,"Contagious Diseases Act 1868",Punjab,"British India",30.9911697,74.5518415
+Jullundur,1888,0.0,,0,0,0,0,0,0,0,"Cantonment Act 1880",Punjab,"British India",31.416667,75.616667
+Kamptee,1888,0.0,,0,0,0,0,0,0,0,"Cantonment Act 1864","Madras Presidency","British India",21.2170645,79.1964178
+Kasauli,1888,5.0,,0,0,0,0,0,0,0,"Cantonment Act 1864",Punjab,"British India",30.4415701,76.8447303
+Madras,1888,0.0,,0,0,0,0,0,0,0,"Contagious Diseases Act 1868","Madras Presidency (Civil)","British India",13.0836939,80.270186
+"Meean Meer",1888,0.0,,0,0,0,0,0,0,0,"Cantonment Act XXII of 1864; Act III of 1880",Punjab,"British India",31.5497,74.3436
+Mooltan,1888,0.0,,0,0,0,0,0,0,0,"Cantonment Act 1880",Punjab,"British India",30.1575,71.5249
+Murree,1888,0.0,,0,0,0,0,0,0,0,"Contagious Diseases Act 1868",Punjab,"British India",33.9056829,73.392674
+Naushahra,1888,0.0,,0,0,0,0,0,0,0,"Cantonment Act XXII of 1864; Act III of 1880",Punjab,"British India",31.6853407,74.8985624
+Peshawar,1888,0.0,,0,0,0,0,0,0,0,"Cantonment Act 1880",Punjab,"British India",17.402817,78.4615197
+Rangoon,1888,0.0,,0,0,0,0,0,0,0,"Contagious Diseases Act 1868","British Burma Division","British Burma",16.7967129,96.1609916
+Rawalpindi,1888,0.0,,0,0,0,0,0,0,0,"Cantonment Act 1880",Punjab,"British India",31.2873363,75.792424
+Secunderabad,1888,0.0,,0,0,0,0,0,0,0,"Cantonment Act 1864","Madras Presidency","British India",17.4337246,78.5006827
+Sialkot,1888,0.0,,0,0,0,0,0,0,0,"Cantonment Act 1880",Punjab,"British India",32.4935378,74.5411575
+"St. Thomas' Mount",1888,0.0,,0,0,0,0,0,0,0,"Cantonment Act 1864","Madras Presidency","British India",12.9947654,80.1993715
+Subathu,1888,0.0,,0,0,0,0,0,0,0,"Cantonment Act 1864",Punjab,"British India",30.9768704,76.9946534
+Umballa,1888,89.0,8,0,0,0,0,0,0,0,"Cantonment Act 1864",Punjab,"British India",30.3607,76.7794
+Wellington,1888,0.0,,0,0,0,0,0,0,0,"Cantonment Act 1864","Madras Presidency","British India",11.3560782,76.7861039
+Attock,1889,0.0,,0,0,0,0,0,0,0,"Cantonment Act 1864",Punjab,"British India",33.7695323,72.3610911
+Bangalore,1889,0.0,,0,0,0,0,0,0,0,"Cantonment Act 1864","Madras Presidency","British India",13.0613607,80.1396767
+Belgaum,1889,0.0,,0,0,0,0,0,0,0,"Cantonment Act 1864","Madras Presidency","British India",15.8572666,74.5069343
+Bellary,1889,0.0,,0,0,0,0,0,0,0,"Cantonment Act 1864","Madras Presidency","British India",15.1430224,76.9173277
+Cannanore,1889,0.0,,0,0,0,0,0,0,0,"Cantonment Act 1864","Madras Presidency","British India",11.8763836,75.3737973
+Dagshai,1889,30.0,2,0,0,0,0,0,0,0,"Cantonment Act 1880",Punjab,"British India",30.8684273,77.0651484
+Dalhousie,1889,0.0,,0,0,0,0,0,0,0,"Cantonment Act 1880",Punjab,"British India",32.2730553,75.6739784
+Delhi,1889,96.0,8,0,0,0,0,0,0,0,"Cantonment Act 1864",Punjab,"British India",30.9587052,74.610057
+Ferozepore,1889,0.0,,0,0,0,0,0,0,0,"Cantonment Act 1880",Punjab,"British India",30.9911697,74.5518415
+Jullundur,1889,0.0,,0,0,0,0,0,0,0,"Cantonment Act 1880",Punjab,"British India",31.416667,75.616667
+Kamptee,1889,0.0,,0,0,0,0,0,0,0,"Cantonment Act 1864","Madras Presidency","British India",21.2170645,79.1964178
+Kasauli,1889,4.0,,0,0,0,0,0,0,0,"Cantonment Act 1864",Punjab,"British India",30.4415701,76.8447303
+Madras,1889,0.0,,0,0,0,0,0,0,0,"Contagious Diseases Act 1868","Madras Presidency (Civil)","British India",13.0836939,80.270186
+"Meean Meer",1889,0.0,,0,0,0,0,0,0,0,"Cantonment Act 1880",Punjab,"British India",31.5497,74.3436
+Mooltan,1889,0.0,,0,0,0,0,0,0,0,"Cantonment Act 1880",Punjab,"British India",30.1575,71.5249
+Murree,1889,0.0,,0,0,0,0,0,0,0,"Cantonment Act 1880",Punjab,"British India",33.9056829,73.392674
+Naushahra,1889,0.0,,0,0,0,0,0,0,0,"Cantonment Act 1880",Punjab,"British India",31.6853407,74.8985624
+Peshawar,1889,0.0,,0,0,0,0,0,0,0,"Cantonment Act 1880",Punjab,"British India",17.402817,78.4615197
+Rangoon,1889,0.0,,0,0,0,0,0,0,0,"Contagious Diseases Act 1868","British Burma Division","British Burma",16.7967129,96.1609916
+Rawalpindi,1889,0.0,,0,0,0,0,0,0,0,"Cantonment Act 1880",Punjab,"British India",31.2873363,75.792424
+Secunderabad,1889,0.0,,0,0,0,0,0,0,0,"Cantonment Act 1864","Madras Presidency","British India",17.4337246,78.5006827
+Sialkot,1889,0.0,,0,0,0,0,0,0,0,"Cantonment Act 1880",Punjab,"British India",32.4935378,74.5411575
+"St. Thomas' Mount",1889,0.0,,0,0,0,0,0,0,0,"Cantonment Act 1864","Madras Presidency","British India",12.9947654,80.1993715
+Subathu,1889,0.0,,0,0,0,0,0,0,0,"Cantonment Act 1864",Punjab,"British India",30.9768704,76.9946534
+Umballa,1889,86.5,7,0,0,0,0,0,0,0,"Cantonment Act 1880",Punjab,"British India",30.3607,76.7794
+Wellington,1889,0.0,,0,0,0,0,0,0,0,"Cantonment Act 1864","Madras Presidency","British India",11.3560782,76.7861039
