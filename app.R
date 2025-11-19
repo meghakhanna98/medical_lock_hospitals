@@ -2221,41 +2221,56 @@ server <- function(input, output, session) {
 
   # Reactive cleaned Hospital Notes dataset
   hospital_notes_df <- reactive({
-    # Load ops table
-    ops <- ops_df()
-    if (nrow(ops) == 0) return(ops)
-    want <- c(
-      "station","region","country","year",
-      "ops_inspection_regularity","ops_unlicensed_control_notes",
-      "ops_committee_activity_notes","remarks"
-    )
-    # Determine key column to enable DB updates later
-    key_col <- if ("unique_id" %in% names(ops)) "unique_id" else if ("hid" %in% names(ops)) "hid" else "__rowid__"
-    # Join in notes by HID to populate note fields
+    # Load hospital_notes table directly (not joining with ops)
     nts <- notes_df()
-    if (nrow(nts) > 0 && "hid" %in% names(ops)) {
-      ops <- dplyr::left_join(ops, nts, by = "hid", suffix = c("", "_notes"))
-      for (nm in c("ops_inspection_regularity","ops_unlicensed_control_notes","ops_committee_activity_notes","remarks")) {
-        src <- paste0(nm, "_notes")
-        if (src %in% names(ops)) {
-          if (!(nm %in% names(ops))) ops[[nm]] <- NA
-          ops[[nm]] <- dplyr::coalesce(ops[[src]], ops[[nm]])
-        }
-      }
-    }
-    # Ensure all desired columns exist (create NA if missing)
-    for (nm in setdiff(want, names(ops))) ops[[nm]] <- NA
-    keep_cols <- unique(c(key_col, want))
-    ops <- ops[, intersect(c(keep_cols, names(ops)), keep_cols), drop = FALSE]
-
-    ops %>%
+    if (nrow(nts) == 0) return(data.frame(
+      hid = character(0),
+      doc_id = character(0),
+      station = character(0),
+      region = character(0),
+      country = character(0),
+      year = integer(0),
+      ops_inspection_regularity = character(0),
+      ops_unlicensed_control_notes = character(0),
+      ops_committee_activity_notes = character(0),
+      remarks = character(0)
+    ))
+    
+    # Extract station and year from doc_id (e.g., "NWPO-1878" -> region "NWPO", year "1878")
+    # If extracted_year exists, use that; otherwise try to parse from doc_id
+    nts <- nts %>%
+      dplyr::mutate(
+        year = dplyr::coalesce(
+          suppressWarnings(as.integer(extracted_year)),
+          suppressWarnings(as.integer(stringr::str_extract(doc_id, "\\d{4}")))
+        ),
+        region_code = stringr::str_extract(doc_id, "^[A-Z]+"),
+        station = NA_character_,  # We don't have station info in hospital_notes
+        region = NA_character_,
+        country = NA_character_
+      )
+    
+    # Clean and normalize the notes fields
+    nts %>%
+      dplyr::select(
+        hid,
+        doc_id,
+        station,
+        region,
+        country,
+        year,
+        ops_inspection_regularity,
+        ops_unlicensed_control_notes,
+        ops_committee_activity_notes,
+        remarks
+      ) %>%
       dplyr::mutate(
         ops_inspection_regularity = .normalize_regularity(ops_inspection_regularity),
         ops_unlicensed_control_notes = .strip_specials(ops_unlicensed_control_notes),
         ops_committee_activity_notes = .strip_specials(ops_committee_activity_notes),
         remarks = .clean_remarks(.strip_specials(remarks)),
-        .key = .data[[key_col]],
-        .key_col = key_col
+        .key = hid,
+        .key_col = "hid"
       )
   })
 

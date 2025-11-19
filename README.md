@@ -1,10 +1,17 @@
-# Medical Lock Hospitals Data Explorer
+# Medical Lock Hospitals: Interactive Research Dashboard
 
-A comprehensive Shiny web application for exploring, cleaning, and analyzing historical medical lock hospital data from British India.
+A comprehensive R Shiny application for visualizing and analyzing historical data on Lock Hospitals in British India and Burma (1873-1889). This digital humanities research tool provides interactive maps, temporal analysis, and qualitative data exploration of colonial medical surveillance systems.
 
 ## Overview
 
-This application provides an interactive interface to work with the `medical_lock_hospitals.db` SQLite database, which contains historical data about medical lock hospitals from the late 19th century British India. The database includes information about women's admissions, troop data, hospital operations, and station reports.
+This application provides an interactive interface to explore the `medical_lock_hospitals.db` SQLite database, containing digitized historical records of Lock Hospitals—institutions used to surveil and control women under the Contagious Diseases Acts. The database includes:
+
+- **332 station-year records** across **56 unique Lock Hospital stations**
+- **Women's admission data** (registration, diseases, punishments)
+- **Military troop data** (venereal disease admissions)
+- **Hospital operations data** (legal regimes, Acts in force)
+- **362 qualitative hospital notes** (inspection reports, committee activities)
+- **Geographic data** with corrected coordinates for British India and Burma
 
 ## Repository layout (cleaned)
 
@@ -27,41 +34,61 @@ Nothing was deleted; files were only relocated.
 
 ## Features
 
-### 📊 Data Overview Dashboard
-- **Database Summary**: Quick statistics on all tables
-- **Data Quality Assessment**: Completeness metrics and missing data analysis
-- **Visual Quality Indicators**: Charts showing data integrity across tables
+### �️ Interactive Geographic Map
+- **Temporal slider**: Explore data year-by-year from 1873 to 1889
+- **Geospatial visualization**: All 56 Lock Hospital stations mapped with corrected coordinates
+- **Circle sizing**: Proportional to average registered women at each station
+- **Color coding**: Stations colored by region (Burma, Punjab, Madras, Bengal, etc.)
+- **Interactive popups**: Click stations to see detailed admission data
+- **Data filtering**: Map shows only stations with actual women's data for selected year
+- **Smart display**: Decimal formatting removed for cleaner presentation
 
-### 📋 Data Tables Explorer
-- **Interactive Tables**: Browse all six database tables with search and pagination
-- **Record Editing**: Click any row to edit individual records with real-time validation
-- **Foreign Key Lookups**: Dropdown menus show related data (e.g., document names for doc_id fields)
-- **Add New Records**: Create new entries with automatic form generation
-- **Delete Records**: Remove entries with confirmation dialogs
-- **Export Capabilities**: Download data in CSV, Excel, or JSON formats
-- **Real-time Filtering**: Search and filter data dynamically
+### � Hospital Notes Page
+- **Qualitative data explorer**: Browse all 362 hospital inspection notes
+- **Rich textual data**: Inspection regularity, unlicensed women control, committee activities, remarks
+- **Searchable interface**: Filter by station, year, region, or keywords
+- **Document linkage**: Each note linked to source documents
+- **Year extraction**: Automatic parsing of years from document IDs
+- **Text normalization**: Cleaned and standardized note content
 
-### 📈 Visualizations
-- **Temporal Analysis**: Time-series plots showing data trends over years
-- **Geographic Analysis**: Regional distribution and country-based analysis
-- **Statistical Analysis**: Correlation analysis and activity level comparisons
-- **Interactive Charts**: Powered by Plotly for dynamic exploration
+### 📋 Lock Hospital Admissions Table
+- **Women's surveillance data**: Registration, additions, removals by station and year
+- **Disease tracking**: Primary syphilis, secondary syphilis, gonorrhoea, leucorrhoea
+- **Punishment records**: Fines and imprisonments for non-compliance
+- **Filtered display**: Shows only stations with actual data (no empty rows)
+- **Whole number formatting**: Clean integer display for counts
+- **Export capability**: Download filtered data for analysis
 
-### 💾 Data Export
-- **Table Export**: Export any table in multiple formats
-- **Custom Query Export**: Run SQL queries and export results
-- **Flexible Formats**: CSV, Excel, and JSON export options
+### 📈 Temporal Analysis
+- **Year-over-year trends**: Track Lock Hospital expansion from 6 Burma stations (1873) to peak coverage (26-27 stations, 1880-1882)
+- **Regional patterns**: Compare surveillance intensity across Burma, Punjab, Madras, Bengal, Bombay
+- **Act implementation tracking**: Visualize legal regime changes (Act XXII 1864, Act XIV 1868, Act III 1880, Voluntary System)
+
+### 🎯 Data Quality & Coverage
+- **Comprehensive data verification**: 332 station-year records validated
+- **Geographic accuracy**: Coordinates corrected for Moulmein, Bassein, Peshawar, and other key stations
+- **Station standardization**: "Sitabaldi" and "Seetabuldee" unified to "Nagpur"
+- **Missing data handling**: Intelligent filtering to show only meaningful records
 
 ## Database Schema
 
-The application works with six main tables:
+The application works with seven main tables:
 
-1. **documents** - Source documents and reports
-2. **stations** - Hospital stations with geographic information
-3. **station_reports** - Relationships between documents and stations
-4. **women_data** - Women's admission data (306 records)
-5. **troop_data** - Military troop data (300 records)
-6. **hospital_operations** - Hospital operational data (362 records)
+1. **documents** - Source documents (Colonial Medical Annual Reports)
+2. **stations** - 59 Lock Hospital stations with corrected geographic coordinates
+3. **station_reports** - Document-station linkages
+4. **women_admission** - Women's surveillance data (332 station-year records)
+5. **troops** - Military venereal disease data (300 records)
+6. **hospital_operations** - Legal regimes and Acts in force by station-year
+7. **hospital_notes** - 362 qualitative inspection reports with textual analysis
+
+### Data Coverage Summary
+
+- **Temporal range**: 1873-1889 (17 years)
+- **Geographic scope**: 56 unique Lock Hospital stations across British India and Burma
+- **Peak surveillance**: 1880-1882 (26-27 stations reporting)
+- **Initial deployment**: 1873 (6 Burma stations: Rangoon, Moulmein, Bassein, Tonghoo, Thayetmyo, Mandalay)
+- **Regional distribution**: Burma, Punjab, Madras, Bengal, Bombay, Central India, Northwestern Provinces
 
 ## Data Dictionary and Glossary
 
@@ -181,14 +208,24 @@ Tip: Prefer station_id joins via station_reports for document-station relationsh
 - committee_supervision (hospital_notes)
    - magistrate_oversight, committee, subcommittee_regular, subcommittee_irregular
 
-### Standardizations and Naming Rules (Applied in October 2025)
+### Recent Data Corrections (November 2025)
 
-- “India (British Burma)” and “India (British Burma)+G143” → standardized to Rangoon
-   - Duplicated station rows consolidated into a single canonical “Rangoon”; dependent rows in station_reports repointed
-- “Seetabuldee” and “Sitabaldi” unified to “Sitabaldi (Nagpur)” with coordinates set
-- Coordinates added/updated (WGS84) for: Tonghoo (18.9398, 96.4344), Jubbulpore (23.1686, 79.9339), Muttra (27.4924, 77.6737), Umballa (30.3752, 76.7821), Meean Meer (31.5484, 74.3602), Fyzabad (26.7730, 82.1458), Mooltan (30.1979793, 71.4724978)
+**Geographic coordinate fixes:**
+- **Moulmein**: Corrected from Mumbai (18.98°, 72.83°) to Burma (16.49°, 97.63°)
+- **Bassein**: Corrected from Mumbai/Vasai (19.38°, 72.83°) to Pathein, Burma (16.78°, 94.73°)
+- **Peshawar**: Corrected from Hyderabad (17.40°, 78.46°) to Pakistan/Punjab frontier (34.02°, 71.52°)
+- **Nagpur and Kamptee**: Coordinates verified as correct in Central India
 
-All changes were scripted with backups to archive/backups/ and are reflected in the live SQLite database.
+**Station name standardization:**
+- "Sitabaldi" and "Seetabuldee" unified to "Nagpur" with proper coordinates
+- "India (British Burma)" consolidated to "Rangoon" (standardized in October 2025)
+
+**Display improvements:**
+- Removed decimal formatting from whole number counts (e.g., 119.0 → 119)
+- Filtered empty data rows (showing only stations with actual women's data)
+- Default year set to 1873 (earliest data point) instead of 1879
+
+All changes are backed up in archive/backups/ and reflected in the live SQLite database.
 
 ### Geospatial Conventions
 
@@ -205,23 +242,32 @@ All changes were scripted with backups to archive/backups/ and are reflected in 
 ## Installation & Setup
 
 ### Prerequisites
-- R (version 3.6 or higher)
-- RStudio (recommended)
-- The `medical_lock_hospitals.db` database file
+- R (version 4.0 or higher recommended)
+- RStudio (recommended for development)
+- The `medical_lock_hospitals.db` SQLite database file (included in repository)
 
 ### Quick Start
 
-1. **Install R packages**:
+1. **Clone or download this repository**
+
+2. **Install R packages**:
    ```bash
    Rscript install_packages.R
    ```
 
-2. **Run the application**:
+3. **Run the application**:
+   ```bash
+   Rscript run_app.R
+   ```
+   
+   Or from R console:
    ```r
    source("run_app.R")
    ```
 
-3. **Access the app**: Open your web browser to `http://localhost:3838`
+4. **Access the app**: Open your web browser to `http://127.0.0.1:8891`
+
+The app will launch in SAFE_MODE by default, which prevents accidental data modifications.
 
 ### Manual Installation
 
@@ -241,44 +287,95 @@ shiny::runApp("app.R")
 
 ## Usage Guide
 
-### Data Overview Tab
-- View database statistics and data quality metrics
-- Identify tables with missing or incomplete data
-- Get a quick understanding of your dataset
+### Interactive Map Tab (Primary Interface)
+1. **Use the year slider** to navigate from 1873 to 1889
+2. **Hover over circles** to see station names and regions
+3. **Click on stations** to view detailed popup with:
+   - Total registered women
+   - Women added/removed
+   - Disease statistics (syphilis, gonorrhoea, leucorrhoea)
+   - Punishment data (fines, imprisonments)
+4. **Circle size** represents average registered women
+5. **Color** indicates geographic region
 
-### Data Tables Tab
-- Select any table from the dropdown
-- **Click on any row to edit it** - forms appear automatically
-- **Foreign key columns show dropdowns** with related data (e.g., document names)
-- Use "Add New Record" to create new entries
-- Use "Delete Record" to remove entries (with confirmation)
-- Export data directly from the interface
+### Hospital Notes Tab
+1. **Browse qualitative data** from 362 inspection reports
+2. **Search and filter** by station, year, or keywords
+3. **Read detailed notes** on:
+   - Inspection regularity (weekly, monthly, irregular)
+   - Control of unlicensed women
+   - Committee and magistrate oversight
+   - General remarks from colonial officials
+4. **Export filtered notes** for textual analysis
 
-### Visualizations Tab
-- **Temporal Analysis**: Explore trends over time
-- **Geographic Analysis**: Understand regional patterns
-- **Statistical Analysis**: Discover correlations and patterns
+### Lock Hospital Admissions Table
+1. **View tabular data** for all station-year records
+2. **Filter and search** to find specific stations or years
+3. **See complete admission flows**: start register → additions → removals → end register
+4. **Track disease patterns** across time and space
+5. **Export data** in CSV format for statistical analysis
 
-### Export Tab
-- Export cleaned data in your preferred format
-- Run custom SQL queries and export results
-- Generate reports for further analysis
+### Understanding the Data
+- **avg_registered**: Monthly average of women under surveillance
+- **women_added**: New women registered during the year
+- **women_removed**: Women released/removed from register
+- **fined_count** and **imprisonment_count**: Coercive enforcement measures
+- **disease counts**: Medical surveillance outcomes
 
-## Customization
+## Research Applications
 
-### Adding New Visualizations
-The app is designed to be easily extensible. To add new visualizations:
+This dashboard supports multiple types of historical analysis:
 
-1. Add a new tab panel in the UI
-2. Create corresponding server logic
-3. Add database queries as needed
+### Spatial Analysis
+- Map the geographic expansion of Lock Hospital surveillance (1873-1889)
+- Compare regional implementation patterns (Burma vs. Punjab vs. Madras)
+- Analyze proximity to military cantonments and railway infrastructure
 
-### Database Modifications
-If you modify the database schema:
+### Temporal Analysis
+- Track the growth and decline of the Lock Hospital system
+- Correlate with legal regime changes (Acts of 1864, 1868, 1880)
+- Identify periods of intensified or relaxed surveillance
 
-1. Update the table selection dropdowns
-2. Modify the data quality checks
-3. Update the visualization queries
+### Quantitative Analysis
+- Women's registration numbers as proxy for surveillance intensity
+- Disease statistics and medical categorization practices
+- Punishment data (fines/imprisonments) as measure of coercive enforcement
+- Troop-to-women ratios for military-medical nexus analysis
+
+### Qualitative Analysis
+- Inspection reports reveal colonial administrative practices
+- Committee notes show local resistance and negotiation
+- Remarks provide narrative context for quantitative patterns
+- Document diverse regional implementations of imperial policy
+
+### Data Export for Advanced Analysis
+- Export to CSV for statistical software (R, Python, STATA)
+- Geographic coordinates ready for GIS analysis (QGIS, ArcGIS)
+- Temporal data structured for time-series analysis
+- Textual notes prepared for computational text analysis
+
+## Technical Details
+
+### Key Technologies
+- **R Shiny**: Interactive web application framework
+- **Leaflet**: Interactive mapping with OpenStreetMap
+- **DT**: Interactive data tables
+- **RSQLite**: Database connectivity
+- **dplyr**: Data manipulation
+- **stringr**: Text processing for qualitative notes
+
+### Application Architecture
+- **Reactive programming**: Efficient data updates based on user input
+- **SAFE_MODE**: Prevents accidental data modifications
+- **Database connections**: Connection pooling for performance
+- **Text normalization**: Automated cleaning of qualitative notes
+- **Dynamic filtering**: Real-time data filtering based on year selection
+
+### Data Integrity
+- **Coordinate validation**: All geographic coordinates verified against historical sources
+- **Foreign key constraints**: Maintain referential integrity across tables
+- **Backup system**: All modifications backed up to `archive/backups/`
+- **Version control**: Database changes tracked with timestamps
 
 ## Troubleshooting
 
@@ -286,52 +383,82 @@ If you modify the database schema:
 
 **"Database file not found"**
 - Ensure `medical_lock_hospitals.db` is in the same directory as `app.R`
-- If you need to rebuild the DB from raw sources, the helper scripts live under `archive/python_tools/` (e.g., `create_database.py`).
+- Database should be 5-10 MB in size (check file exists and isn't corrupted)
 
 **Package installation errors**
-- Update R to the latest version
-- Install packages individually if batch installation fails
-- Check for system dependencies (especially on Linux)
+- Update R to version 4.0 or higher: `install.packages("installr"); installr::updateR()`
+- Install packages individually if batch fails: `install.packages("shiny")`
+- macOS users may need XQuartz for some dependencies
 
-**App won't start**
-- Check that all required packages are installed
-- Verify R version compatibility
-- Check console for error messages
+**App shows no data on map**
+- Check year slider is set to a year with data (1873-1889)
+- Verify database has not been corrupted (332 records in women_admission)
+- Check browser console for JavaScript errors
 
-### Performance Tips
+**Port already in use (8891)**
+- Kill existing R sessions: `pkill -f run_app.R`
+- Or use different port in run_app.R
 
-- For large datasets, consider adding pagination limits
-- Use database indexes for frequently queried columns
-- Implement caching for expensive operations
+### Performance Notes
+- Initial load indexes 59 stations and calculates 332 station-year records
+- Map rendering is optimized to show only stations with data
+- Large text exports may take 2-3 seconds (362 hospital notes)
 
-## Data Sources
+## Data Sources & Provenance
 
-The application works with historical data from:
-- Colonial Medical Annual Lock Hospital Reports
-- British India administrative records
-- Military and civilian hospital operations data
+### Primary Sources
+- **Colonial Medical Annual Lock Hospital Reports** (1873-1889)
+- **Report on the Contagious Diseases Acts** (various years)
+- **Annual Sanitary Reports**: British India, Burma, Bengal, Madras, Bombay, Punjab
+- **Parliamentary Papers**: Reports on the operation of Contagious Diseases Acts in India
 
-## Contributing
+### Digitization Process
+1. Historical documents digitized from archives
+2. Data extracted via Python tools (`python_tools/extract_burma_women_data.py`)
+3. Station coordinates geocoded and manually verified
+4. Text notes cleaned and standardized
+5. Database created with referential integrity constraints
 
-To contribute to this project:
+### Data Quality
+- **Geographic accuracy**: All station coordinates manually verified against historical maps
+- **Temporal completeness**: 17 consecutive years of data (1873-1889)
+- **Source linkage**: All records linked to original documents via `doc_id`
+- **Qualitative preservation**: 362 original inspection notes preserved with minimal cleaning
 
-1. Fork the repository
-2. Create a feature branch
-3. Make your changes
-4. Test thoroughly
-5. Submit a pull request
+## Project Context
+
+This digital humanities research infrastructure was developed to analyze the implementation of Contagious Diseases Acts in British India and Burma. The Lock Hospital system was a colonial mechanism for surveilling and controlling women, ostensibly to prevent venereal disease transmission to British troops.
+
+### Research Questions Supported
+- How did Lock Hospital surveillance expand geographically over time?
+- What were regional variations in implementation intensity?
+- How did legal regimes (different Acts) shape surveillance practices?
+- What do punishment records reveal about resistance and enforcement?
+- How did colonial officials describe and justify these practices?
+
+### Scholarly Significance
+This dashboard makes visible the bureaucratic infrastructure of colonial medical surveillance, connecting quantitative patterns (women registered, diseases recorded, punishments imposed) with qualitative evidence (inspection reports, official remarks). It supports both macroscopic analysis (trends across time and space) and microscopic examination (individual station practices).
+
+## Citation
+
+If you use this dashboard or data in your research, please cite:
+
+```
+Medical Lock Hospitals Interactive Research Dashboard (2025)
+Digital Humanities Research Tool for Colonial Medical Surveillance in British India and Burma, 1873-1889
+https://github.com/meghakhanna98/medical_lock_hospitals
+```
+
+## Acknowledgments
+
+- Historical archives for document preservation and access
+- OpenStreetMap contributors for base map tiles
+- R Shiny and Leaflet development communities
 
 ## License
 
-This project is open source and available under the MIT License.
-
-## Support
-
-For questions or issues:
-- Check the troubleshooting section above
-- Review the R console for error messages
-- Ensure all dependencies are properly installed
+This project is open source and available under the MIT License. Historical data is in the public domain.
 
 ---
 
-**Note**: This application is designed for historical research and data analysis. Always verify data accuracy and consider the historical context when interpreting results.
+**Research Ethics Note**: This database documents a coercive colonial system that caused significant harm to women. The data should be used to understand and critique colonial medical surveillance, not to perpetuate harmful categorizations. Station names, coordinates, and statistics are preserved for historical accuracy, but we acknowledge the violence embedded in this archive.
