@@ -1,6 +1,6 @@
 # Medical Lock Hospitals: Interactive Research Dashboard
 
-A comprehensive R Shiny application for visualizing and analyzing historical data on Lock Hospitals in British India and Burma (1873-1889). This digital humanities research tool provides interactive maps, temporal analysis, and qualitative data exploration of colonial medical surveillance systems.
+A comprehensive R Shiny application for visualizing and analyzing historical data on Lock Hospitals in British India and Burma (1873-1889). This digital humanities research tool provides interactive maps and qualitative data exploration of colonial medical surveillance systems.
 
 ## Overview
 
@@ -13,7 +13,7 @@ This application provides an interactive interface to explore the `medical_lock_
 - **362 qualitative hospital notes** (inspection reports, committee activities)
 - **Geographic data** with corrected coordinates for British India and Burma
 
-## Repository layout (cleaned)
+## Repository layout
 
 To keep the Explorer uncluttered, most maintenance scripts, logs, and one-off exports have been moved into subfolders. Only what you need to run the app stays at the root.
 
@@ -30,7 +30,6 @@ To keep the Explorer uncluttered, most maintenance scripts, logs, and one-off ex
    - `archive/python_tools/` – ingest/DB utilities
    - `research/` – standalone analysis notebooks/scripts
 
-Nothing was deleted; files were only relocated.
 
 ## Features
 
@@ -59,16 +58,6 @@ Nothing was deleted; files were only relocated.
 - **Whole number formatting**: Clean integer display for counts
 - **Export capability**: Download filtered data for analysis
 
-### 📈 Temporal Analysis
-- **Year-over-year trends**: Track Lock Hospital expansion from 6 Burma stations (1873) to peak coverage (26-27 stations, 1880-1882)
-- **Regional patterns**: Compare surveillance intensity across Burma, Punjab, Madras, Bengal, Bombay
-- **Act implementation tracking**: Visualize legal regime changes (Act XXII 1864, Act XIV 1868, Act III 1880, Voluntary System)
-
-### 🎯 Data Quality & Coverage
-- **Comprehensive data verification**: 332 station-year records validated
-- **Geographic accuracy**: Coordinates corrected for Moulmein, Bassein, Peshawar, and other key stations
-- **Station standardization**: "Sitabaldi" and "Seetabuldee" unified to "Nagpur"
-- **Missing data handling**: Intelligent filtering to show only meaningful records
 
 ## Database Schema
 
@@ -208,7 +197,6 @@ Tip: Prefer station_id joins via station_reports for document-station relationsh
 - committee_supervision (hospital_notes)
    - magistrate_oversight, committee, subcommittee_regular, subcommittee_irregular
 
-### Recent Data Corrections (November 2025)
 
 **Geographic coordinate fixes:**
 - **Moulmein**: Corrected from Mumbai (18.98°, 72.83°) to Burma (16.49°, 97.63°)
