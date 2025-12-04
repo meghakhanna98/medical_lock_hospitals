@@ -36,7 +36,34 @@ utils::globalVariables(c(
 if (!dir.exists("content/images")) {
   dir.create("content/images", recursive = TRUE, showWarnings = FALSE)
 }
-shiny::addResourcePath("images", "content/images")
+# Create a sanitized copy of images to avoid spaces/unicode in filenames which can
+# cause browser-loading issues. Serve the sanitized directory as the /images resource.
+img_src_dir <- "content/images"
+img_safe_dir <- "content/images_safe"
+if (!dir.exists(img_safe_dir)) dir.create(img_safe_dir, recursive = TRUE, showWarnings = FALSE)
+
+sanitize_name <- function(fn) {
+  ext <- tools::file_ext(fn)
+  base <- tools::file_path_sans_ext(fn)
+  # transliterate to ASCII, replace non-alphanumerics with underscore
+  base2 <- iconv(base, to = "ASCII//TRANSLIT", sub = "")
+  base2 <- gsub("[^A-Za-z0-9._-]", "_", base2)
+  base2 <- gsub("_+", "_", base2)
+  newn <- if (nzchar(ext)) paste0(base2, ".", tolower(ext)) else base2
+  newn
+}
+
+src_files <- list.files(img_src_dir, full.names = FALSE)
+for (f in src_files) {
+  src <- file.path(img_src_dir, f)
+  # Skip if source is a directory
+  if (dir.exists(src)) next
+  dst <- file.path(img_safe_dir, sanitize_name(f))
+  if (!file.exists(dst)) {
+    tryCatch(file.copy(src, dst), error = function(e) message("Failed to copy image: ", f, " -> ", e$message))
+  }
+}
+shiny::addResourcePath("images", img_safe_dir)
 
 # Toggle to disable heavy analytics and long-running observers while debugging UI
 # Set to TRUE to enable Safe Mode (shows map/tables but skips heavy analyses)
@@ -139,7 +166,7 @@ ui <- dashboardPage(
               "This dataset is built from nineteenth-century Lock Hospital Reports and Sanitary Commissioner's Reports produced under British rule in India. These records were part of a larger administrative effort to monitor women categorized as \"registered prostitutes\" under the Contagious Diseases Acts. Through these reports, the colonial state sought to control the spread of venereal disease among soldiers by transforming women's bodies into objects of record and inspection."
             ),
             p(class = "story-text", style = "color: rgba(255,255,255,0.95);",
-              "The figures contained in these documents—women admitted, discharged, fined, or imprisoned; soldiers treated for disease; hospitals opened or closed—offer insight into how public health became a language of governance. What appeared as medical management was deeply tied to moral discipline and imperial control."
+              "The figures in these documents (women admitted, discharged, fined or imprisoned, soldiers treated for disease, hospital openings and closures) show how public health became a language of governance. Medical management was tightly bound to moral discipline and imperial control."
             ),
             p(class = "story-text", style = "color: rgba(255,255,255,0.95);",
               "Each entry in this dataset reflects the bureaucratic structure of the colonial state: the staffing of hospitals, the geography of cantonments, and the regular counting of \"registered\" and \"unregistered\" women. Taken together, these numbers allow us to see how the colonial government converted everyday life into data, turning acts of care into mechanisms of surveillance."
@@ -830,6 +857,104 @@ server <- function(input, output, session) {
   conn <- reactive({
     con_obj
   })
+  
+  # Load railway shapefiles (MOVED INSIDE SERVER FUNCTION)
+  railway_lines <- tryCatch({
+    message("Loading railway_lines.shp...")
+    lines <- st_read("data_raw/railway_lines.shp", quiet = TRUE)
+    message(sprintf("SUCCESS: railway_lines loaded with %d features", nrow(lines)))
+    lines
+  }, error = function(e) {
+    message("ERROR loading railway lines shapefile: ", e$message)
+    NULL
+  })
+  
+  railway_stations <- tryCatch({
+    message("Loading railway_stations_extended.shp...")
+    stations <- st_read("data_raw/railway_stations_extended.shp", quiet = TRUE)
+    message(sprintf("SUCCESS: railway_stations loaded with %d features", nrow(stations)))
+    stations
+  }, error = function(e) {
+    message("ERROR loading railway stations shapefile: ", e$message)
+    NULL
+  })
+
+  # Enrich railway stations with attributes from nearest railway line
+  if (!is.null(railway_lines) && !is.null(railway_stations)) {
+    try({
+      message("Enriching railway stations with nearest line attributes...")
+      rl <- st_transform(railway_lines, 4326)
+      rs <- st_transform(railway_stations, 4326)
+      idx <- sf::st_nearest_feature(rs, rl)
+      rs$nearest_section <- rl$Section[idx]
+      rs$nearest_railway <- rl$Railway[idx]
+      rs$nearest_year <- rl$Year[idx]
+      railway_stations <- rs
+      message("Railway stations enriched successfully")
+    }, silent = TRUE)
+  }
+
+  # Load override CSV if present
+  override_path <- "data_raw/railway_lines_override.csv"
+  if (file.exists(override_path)) {
+    try({
+      message("Loading railway lines override from ", override_path)
+      ov <- utils::read.csv(override_path, stringsAsFactors = FALSE)
+      new_lines <- list()
+      if (nrow(ov) > 0 && "station_seq" %in% names(ov)) {
+        for (i in seq_len(nrow(ov))) {
+          row <- ov[i, , drop = FALSE]
+          stations <- strsplit(as.character(row$station_seq), ",")[[1]]
+          stations <- trimws(stations)
+          coords <- lapply(stations, function(s) {
+            m <- which(tolower(railway_stations$orig_name) == tolower(s) | tolower(railway_stations$modern_nam) == tolower(s))
+            if (length(m) == 0) return(NULL)
+            c(railway_stations$lon[m[1]], railway_stations$lat[m[1]])
+          })
+          coords <- Filter(Negate(is.null), coords)
+          if (length(coords) >= 2) {
+            mat <- do.call(rbind, coords)
+            ls <- sf::st_linestring(mat)
+            sfc <- sf::st_sfc(ls, crs = 4326)
+            sfobj <- sf::st_sf(data.frame(Section = row$Section, Railway = row$Railway, Year = row$Year, stringsAsFactors = FALSE), geometry = sfc)
+            new_lines[[length(new_lines) + 1]] <- sfobj
+          }
+        }
+      } else if (nrow(ov) > 0 && all(c("station","seq","Section","Railway") %in% names(ov))) {
+        grp_keys <- unique(paste(ov$Section, ov$Railway, ov$Year, sep = "__"))
+        for (g in grp_keys) {
+          parts <- strsplit(g, "__", fixed = TRUE)[[1]]
+          sec <- parts[1]; rail <- parts[2]; yr <- parts[3]
+          sub <- ov[ov$Section == sec & ov$Railway == rail & as.character(ov$Year) == as.character(yr), ]
+          sub <- sub[order(as.numeric(sub$seq)), ]
+          stations <- trimws(as.character(sub$station))
+          coords <- lapply(stations, function(s) {
+            m <- which(tolower(railway_stations$orig_name) == tolower(s) | tolower(railway_stations$modern_nam) == tolower(s))
+            if (length(m) == 0) return(NULL)
+            c(railway_stations$lon[m[1]], railway_stations$lat[m[1]])
+          })
+          coords <- Filter(Negate(is.null), coords)
+          if (length(coords) >= 2) {
+            mat <- do.call(rbind, coords)
+            ls <- sf::st_linestring(mat)
+            sfc <- sf::st_sfc(ls, crs = 4326)
+            sfobj <- sf::st_sf(data.frame(Section = sec, Railway = rail, Year = yr, stringsAsFactors = FALSE), geometry = sfc)
+            new_lines[[length(new_lines) + 1]] <- sfobj
+          }
+        }
+      }
+
+      if (length(new_lines) > 0) {
+        new_sf <- do.call(rbind, new_lines)
+        if (is.null(railway_lines)) {
+          railway_lines <- new_sf
+        } else {
+          railway_lines <- rbind(railway_lines, new_sf)
+        }
+        message("Appended ", length(new_lines), " override railway lines from CSV")
+      }
+    }, silent = TRUE)
+  }
 
   # On app start, set the year slider to 1873 (earliest year with data)
   try({
@@ -921,20 +1046,99 @@ server <- function(input, output, session) {
     map_df
   })
   
-  # Load railway shapefiles (once at startup)
-  railway_lines <- tryCatch({
-    st_read("data_raw/railway_lines.shp", quiet = TRUE)
-  }, error = function(e) {
-    message("Railway lines shapefile not found: ", e$message)
-    NULL
-  })
-  
-  railway_stations <- tryCatch({
-    st_read("data_raw/railway_stations_extended.shp", quiet = TRUE)
-  }, error = function(e) {
-    message("Railway stations shapefile not found: ", e$message)
-    NULL
-  })
+  # Helper: draw railway overlays (lines + stations) for a given year
+    draw_rail_overlays <- function(selected_year) {
+      # defensive
+      if (is.null(selected_year)) return(invisible(NULL))
+      if (is.null(railway_lines) && is.null(railway_stations)) return(invisible(NULL))
+
+      message(sprintf("draw_rail_overlays() called for year: %s", as.character(selected_year)))
+      
+      # Debug: check railway_lines state
+      if (is.null(railway_lines)) {
+        message("railway_lines is NULL - no lines to draw")
+        railways_filtered <- NULL
+      } else {
+        message(sprintf("railway_lines has %d rows", nrow(railway_lines)))
+        # prepare filtered lines
+        rail_year <- suppressWarnings(as.numeric(as.character(railway_lines$Year)))
+        message(sprintf("rail_year values: %s", paste(head(rail_year, 10), collapse=", ")))
+        railways_filtered <- tryCatch({
+          filtered <- railway_lines[ ( !is.na(rail_year) & rail_year <= selected_year ) | is.na(rail_year), ]
+          message(sprintf("After filtering by year <= %s: %d rows", selected_year, nrow(filtered)))
+          filtered
+        }, error = function(e) {
+          message(sprintf("Error filtering railway_lines: %s", e$message))
+          railway_lines
+        })
+      }
+
+      # prepare filtered stations based on nearest_year (if available)
+      railway_stations_filtered <- railway_stations
+      if (!is.null(railway_stations) && nrow(railway_stations) > 0) {
+        ny <- tryCatch({ suppressWarnings(as.numeric(as.character(railway_stations$nearest_year))) }, error = function(e) rep(NA, nrow(railway_stations)))
+        railway_stations_filtered <- tryCatch({
+          railway_stations[ ( !is.na(ny) & ny <= selected_year ) | is.na(ny), ]
+        }, error = function(e) railway_stations)
+      }
+
+      proxy <- leafletProxy("map")
+      proxy %>% clearGroup("railways") %>% clearGroup("railway_stations")
+
+      if (!is.null(railways_filtered) && nrow(railways_filtered) > 0) {
+        message(sprintf("Drawing railway lines - filtered rows: %d", nrow(railways_filtered)))
+        
+        # Draw lines manually using lng/lat pairs from sf geometry
+        for (i in seq_len(nrow(railways_filtered))) {
+          tryCatch({
+            line_coords <- st_coordinates(railways_filtered[i, ])
+            if (nrow(line_coords) >= 2) {
+              proxy <- proxy %>% addPolylines(
+                lng = line_coords[, "X"],
+                lat = line_coords[, "Y"],
+                color = "#d62728",
+                weight = 3,
+                opacity = 0.8,
+                group = "railways",
+                popup = paste0(
+                  "<b>Railway Section</b><br>",
+                  "Section: ", railways_filtered$Section[i], "<br>",
+                  "Line: ", railways_filtered$Railway[i], "<br>",
+                  "Year Opened: ", railways_filtered$Year[i]
+                ),
+                label = paste0(railways_filtered$Section[i], " - ", railways_filtered$Railway[i])
+              )
+            }
+          }, error = function(e) {
+            message(sprintf("Error drawing line %d: %s", i, e$message))
+          })
+        }
+        message(sprintf("Successfully processed %d railway lines", nrow(railways_filtered)))
+      }
+
+      if (!is.null(railway_stations_filtered) && nrow(railway_stations_filtered) > 0) {
+        message(sprintf("railway_stations_filtered rows: %d", nrow(railway_stations_filtered)))
+        proxy %>% addCircleMarkers(
+          data = railway_stations_filtered,
+          radius = 4,
+          color = "#f39c12",
+          fillColor = "#f1c40f",
+          fillOpacity = 0.8,
+          weight = 1.5,
+          group = "railway_stations",
+          popup = ~paste0(
+            "<b>Railway Station</b><br>",
+            "Historic: ", orig_name, "<br>",
+            "Modern: ", modern_nam,
+            if (!is.null(nearest_section)) paste0("<br><b>Section:</b> ", nearest_section) else "",
+            if (!is.null(nearest_railway)) paste0("<br><b>Line:</b> ", nearest_railway) else "",
+            if (!is.null(nearest_year)) paste0("<br><b>Year Opened:</b> ", nearest_year) else ""
+          ),
+          label = ~orig_name
+        )
+      }
+      invisible(NULL)
+    }
   
   # Load British India boundary (modern India, Pakistan, Bangladesh, Myanmar borders as proxy)
   india_boundary <- tryCatch({
@@ -969,56 +1173,133 @@ server <- function(input, output, session) {
           popup = ~name
         )
     }
+
+    # Add initial hospital markers so the map shows data on first render
+    # Use map_data() reactive to get the current station-year rows
+    try({
+      init_data <- map_data()
+      if (is.data.frame(init_data) && nrow(init_data) > 0) {
+        init_data <- init_data %>%
+          dplyr::mutate(
+            marker_color = dplyr::case_when(
+              !has_data ~ "#ecf0f1",
+              is.na(primary_act) ~ "#2c3e50",
+              grepl("1864", primary_act, ignore.case = TRUE) ~ "#e74c3c",
+              grepl("1868", primary_act, ignore.case = TRUE) ~ "#3498db",
+              grepl("1880", primary_act, ignore.case = TRUE) ~ "#9b59b6",
+              grepl("1889", primary_act, ignore.case = TRUE) ~ "#f39c12",
+              grepl("voluntary", primary_act, ignore.case = TRUE) ~ "#27ae60",
+              TRUE ~ "#ecf0f1"
+            ),
+            marker_opacity = ifelse(has_data, 0.6, 0.4)
+          )
+
+        map <- map %>%
+          addCircleMarkers(
+            data = init_data,
+            lng = ~longitude,
+            lat = ~latitude,
+            radius = ~radius,
+            group = "lock_hospitals",
+            popup = ~paste0(
+              "<b>Lock Hospital: ", name, "</b><br>",
+              "Region: ", region, "<br>",
+              "Year: ", input$year_slider, "<br>",
+              ifelse(has_data,
+                paste0("<b>Women Added: ", total_added, "</b><br>", "Total Registered: ", total_registered, "<br>", "Removed: ", total_removed, "<br>"),
+                "<i style='color:#7f8c8d;'>No admission data for this year</i><br>"
+              ),
+              ifelse(is.na(act), "Act: None", act)
+            ),
+            label = ~name,
+            fillColor = ~marker_color,
+            fillOpacity = ~marker_opacity,
+            color = "#2c3e50",
+            weight = 1,
+            stroke = TRUE
+          )
+      }
+    }, silent = TRUE)
     
     map
   })
+
+    # Ensure initial markers are added after the UI has flushed to the client. Using
+    # session$onFlushed guarantees the leaflet map exists on the client before we
+    # attempt to proxy-add markers. Run once only.
+    session$onFlushed(function() {
+      try({
+        init_data <- map_data()
+        if (is.data.frame(init_data) && nrow(init_data) > 0) {
+          init_data <- init_data %>%
+            dplyr::mutate(
+              marker_color = dplyr::case_when(
+                !has_data ~ "#ecf0f1",
+                is.na(primary_act) ~ "#2c3e50",
+                grepl("1864", primary_act, ignore.case = TRUE) ~ "#e74c3c",
+                grepl("1868", primary_act, ignore.case = TRUE) ~ "#3498db",
+                grepl("1880", primary_act, ignore.case = TRUE) ~ "#9b59b6",
+                grepl("1889", primary_act, ignore.case = TRUE) ~ "#f39c12",
+                grepl("voluntary", primary_act, ignore.case = TRUE) ~ "#27ae60",
+                TRUE ~ "#ecf0f1"
+              ),
+              marker_opacity = ifelse(has_data, 0.6, 0.4)
+            )
+
+          leafletProxy("map") %>%
+            clearGroup("lock_hospitals") %>%
+            addCircleMarkers(
+              data = init_data,
+              lng = ~longitude,
+              lat = ~latitude,
+              radius = ~radius,
+              group = "lock_hospitals",
+              popup = ~paste0(
+                "<b>Lock Hospital: ", name, "</b><br>",
+                "Region: ", region, "<br>",
+                "Year: ", input$year_slider, "<br>",
+                ifelse(has_data,
+                  paste0("<b>Women Added: ", total_added, "</b><br>", "Total Registered: ", total_registered, "<br>", "Removed: ", total_removed, "<br>"),
+                  "<i style='color:#7f8c8d;'>No admission data for this year</i><br>"
+                ),
+                ifelse(is.na(act), "Act: None", act)
+              ),
+              label = ~name,
+              fillColor = ~marker_color,
+              fillOpacity = ~marker_opacity,
+              color = "#2c3e50",
+              weight = 1,
+              stroke = TRUE
+            )
+        }
+      }, silent = TRUE)
+    }, once = TRUE)
   
   # Update railway overlays when checkbox changes or year changes
-  observe({
+  observeEvent(list(input$show_railways, input$year_slider), {
+    # Use observeEvent so we trigger when show_railways or year_slider change
     req(input$year_slider)
     
-    if (!is.null(input$show_railways) && input$show_railways && !is.null(railway_lines) && !is.null(railway_stations)) {
-      # Get the selected year
-      selected_year <- input$year_slider
-      
-  # Filter railway lines to only show those opened by the selected year.
-  # Coerce Year to numeric safely and include lines with missing/NA Year so
-  # stations with no recorded opening year still display their lines.
-  rail_year <- suppressWarnings(as.numeric(as.character(railway_lines$Year)))
-  railways_filtered <- railway_lines[ ( !is.na(rail_year) & rail_year <= selected_year ) | is.na(rail_year), ]
-      
-      message(sprintf("Adding railway station overlays for year %d (railway lines disabled)", selected_year))
-
-      leafletProxy("map") %>%
-        clearGroup("railways") %>%
-        clearGroup("railway_stations")
-
-      # Only add railway stations (lines intentionally omitted)
-      if (nrow(railway_stations) > 0) {
-        leafletProxy("map") %>%
-          addCircleMarkers(
-            data = railway_stations,
-            radius = 4,
-            color = "#f39c12",  # Orange border
-            fillColor = "#f1c40f",  # Yellow fill
-            fillOpacity = 0.8,
-            weight = 1.5,
-            group = "railway_stations",
-            popup = ~paste0(
-              "<b>Railway Station</b><br>",
-              "Historic: ", orig_name, "<br>",
-              "Modern: ", modern_nam
-            ),
-            label = ~orig_name
-          )
-      }
+    show_rail <- isTRUE(input$show_railways)
+    message(sprintf("Railway overlay observer triggered: show_railways=%s year=%s", 
+                    as.character(show_rail), as.character(input$year_slider)))
+    
+    if (show_rail && !is.null(railway_lines) && !is.null(railway_stations)) {
+      # Delegate drawing to centralized helper (handles filtering by year and clearing groups)
+      message("Attempting to draw railway overlays...")
+      tryCatch({
+        draw_rail_overlays(input$year_slider)
+        message("Railway overlays drawn successfully")
+      }, error = function(e) {
+        message(sprintf("ERROR drawing railway overlays: %s", e$message))
+      })
     } else {
-      message("Removing railway layers from map")
+      message("Clearing railway layers from map")
       leafletProxy("map") %>%
         clearGroup("railways") %>%
         clearGroup("railway_stations")
     }
-  })
+  }, ignoreNULL = FALSE, ignoreInit = FALSE)
   
   # Update map markers when data or filters change
   observe({
@@ -1249,25 +1530,22 @@ server <- function(input, output, session) {
   current_image_index <- reactiveVal(1)
   
   observeEvent(input$next_image, {
-    img_dir <- "content/images"
+    img_dir <- "content/images_safe"
     img_files <- list.files(img_dir, pattern = "\\.(jpg|jpeg|png|gif|webp)$", ignore.case = TRUE)
     current <- current_image_index()
-    if (current < length(img_files)) {
+    if (length(img_files) > 0 && current < length(img_files)) {
       current_image_index(current + 1)
     }
-  })
+  }, ignoreInit = TRUE, priority = 1)
   
   observeEvent(input$prev_image, {
+    img_dir <- "content/images_safe"
+    img_files <- list.files(img_dir, pattern = "\\.(jpg|jpeg|png|gif|webp)$", ignore.case = TRUE)
     current <- current_image_index()
-    if (current > 1) {
+    if (length(img_files) > 0 && current > 1) {
       current_image_index(current - 1)
     }
-  })
-  
-  # Make the current index available to the UI
-  observe({
-    updateQueryString(sprintf("?image=%d", current_image_index()))
-  })
+  }, ignoreInit = TRUE, priority = 1)
   
   # Close connection when app stops
   onStop(function() {
@@ -1339,22 +1617,23 @@ server <- function(input, output, session) {
 
     HTML(paste0(
       "<div>",
-      "<div class='row' style='margin-bottom:0;'>",
-      "  <div class='col-sm-3' style='text-align:center;'>",
-      "    <div style='font-size:3em;font-weight:bold;color:#3498db;'>", n_stations, "</div>",
-      "    <div style='font-size:1.1em;color:#7f8c8d;'>Stations</div>",
+      "<!-- Flexbox container for horizontal KPI boxes -->",
+      "<div style='display: flex; justify-content: space-between; align-items: center; gap: 20px; flex-wrap: wrap; margin-bottom: 20px;'>",
+      "  <div style='flex: 1; min-width: 200px; text-align: center; padding: 20px; background: rgba(52, 152, 219, 0.05); border-radius: 8px; border-top: 3px solid #3498db;'>",
+      "    <div style='font-size: 3em; font-weight: bold; color: #3498db;'>", n_stations, "</div>",
+      "    <div style='font-size: 1.1em; color: #7f8c8d; margin-top: 10px;'>Stations</div>",
       "  </div>",
-      "  <div class='col-sm-3' style='text-align:center;'>",
-      "    <div style='font-size:3em;font-weight:bold;color:#e74c3c;'>", n_women, "</div>",
-      "    <div style='font-size:1.1em;color:#7f8c8d;'>Women Records</div>",
+      "  <div style='flex: 1; min-width: 200px; text-align: center; padding: 20px; background: rgba(231, 76, 60, 0.05); border-radius: 8px; border-top: 3px solid #e74c3c;'>",
+      "    <div style='font-size: 3em; font-weight: bold; color: #e74c3c;'>", n_women, "</div>",
+      "    <div style='font-size: 1.1em; color: #7f8c8d; margin-top: 10px;'>Women Records</div>",
       "  </div>",
-      "  <div class='col-sm-3' style='text-align:center;'>",
-      "    <div style='font-size:3em;font-weight:bold;color:#f39c12;'>", n_troops, "</div>",
-      "    <div style='font-size:1.1em;color:#7f8c8d;'>Troop Records</div>",
+      "  <div style='flex: 1; min-width: 200px; text-align: center; padding: 20px; background: rgba(243, 156, 18, 0.05); border-radius: 8px; border-top: 3px solid #f39c12;'>",
+      "    <div style='font-size: 3em; font-weight: bold; color: #f39c12;'>", n_troops, "</div>",
+      "    <div style='font-size: 1.1em; color: #7f8c8d; margin-top: 10px;'>Troop Records</div>",
       "  </div>",
-      "  <div class='col-sm-3' style='text-align:center;'>",
-      "    <div style='font-size:3em;font-weight:bold;color:#9b59b6;'>", n_docs, "</div>",
-      "    <div style='font-size:1.1em;color:#7f8c8d;'>Source Documents</div>",
+      "  <div style='flex: 1; min-width: 200px; text-align: center; padding: 20px; background: rgba(155, 89, 182, 0.05); border-radius: 8px; border-top: 3px solid #9b59b6;'>",
+      "    <div style='font-size: 3em; font-weight: bold; color: #9b59b6;'>", n_docs, "</div>",
+      "    <div style='font-size: 1.1em; color: #7f8c8d; margin-top: 10px;'>Source Documents</div>",
       "  </div>",
       "</div>",
       missing_line,
@@ -2361,8 +2640,11 @@ server <- function(input, output, session) {
 
   # Archive Images Gallery with Navigation
   output$overview_images <- renderUI({
-    img_dir <- "content/images"
+    img_dir <- "content/images_safe"
+    message("Rendering overview_images UI")
+    
     if (!dir.exists(img_dir)) {
+      message("Images directory not found")
       return(p("No images directory found. Create 'content/images/' to add archive materials.", 
                style = "color: #95a5a6; font-style: italic;"))
     }
@@ -2371,14 +2653,18 @@ server <- function(input, output, session) {
     img_files <- list.files(img_dir, pattern = "\\.(jpg|jpeg|png|gif|webp)$", 
                            ignore.case = TRUE, full.names = FALSE)
     
+    message(sprintf("Found %d image files", length(img_files)))
+    
     if (length(img_files) == 0) {
       return(p("No images found. Upload images or place them in 'content/images/'.", 
                style = "color: #95a5a6; font-style: italic;"))
     }
     
-    # Current image index (use input$current_image_index or default to 1)
-    current_idx <- isolate(input$current_image_index %||% 1)
+    # Current image index (use reactiveVal current_image_index)
+    current_idx <- current_image_index()
     if (current_idx > length(img_files)) current_idx <- 1
+    
+    message(sprintf("Current image index: %d", current_idx))
     
     # Current image
     current_img <- img_files[current_idx]
@@ -2395,41 +2681,39 @@ server <- function(input, output, session) {
     img_name <- gsub("\\.(jpg|jpeg|png|gif|webp)$", "", current_img, ignore.case = TRUE)
     img_description <- descriptions[[img_name]] %||% img_name
     
-    # Create navigation UI
-    div(
+  # Create navigation UI
+  # URL-encode filename to build a safe src for the <img> tag
+  safe_src <- sprintf("images/%s", utils::URLencode(current_img, reserved = TRUE))
+
+  div(
       style = "max-width: 800px; margin: 0 auto; text-align: center;",
       # Image counter
       div(
         style = "margin-bottom: 15px; font-size: 14px; color: #7f8c8d;",
         sprintf("Image %d of %d", current_idx, length(img_files))
       ),
-      # Image container
+      # Image container with navigation
       div(
-        style = "position: relative; margin: 20px 0; background: #fff; padding: 20px; border-radius: 8px; box-shadow: 0 2px 8px rgba(0,0,0,0.1);",
-        # Navigation buttons
+        style = "position: relative; margin: 20px 0; background: #fff; padding: 60px 20px 20px 20px; border-radius: 8px; box-shadow: 0 2px 8px rgba(0,0,0,0.1);",
+        # Navigation buttons row at top
         div(
-          style = "position: absolute; left: 10px; top: 50%; transform: translateY(-50%); z-index: 2;",
-          if (current_idx > 1) 
-            actionButton(
-              inputId = "prev_image",
-              label = HTML("&#10094;"),
-              style = "background: rgba(0,0,0,0.6); color: white; border: none; border-radius: 50%; width: 40px; height: 40px;"
-            )
-        ),
-        div(
-          style = "position: absolute; right: 10px; top: 50%; transform: translateY(-50%); z-index: 2;",
-          if (current_idx < length(img_files))
-            actionButton(
-              inputId = "next_image",
-              label = HTML("&#10095;"),
-              style = "background: rgba(0,0,0,0.6); color: white; border: none; border-radius: 50%; width: 40px; height: 40px;"
-            )
+          style = "position: absolute; top: 15px; left: 50%; transform: translateX(-50%); z-index: 2; display: flex; gap: 15px;",
+          actionButton(
+            inputId = "prev_image",
+            label = HTML("&#9664; Previous"),
+            style = "background: #3498db; color: white; border: none; border-radius: 4px; padding: 8px 16px; font-size: 14px;"
+          ),
+          actionButton(
+            inputId = "next_image",
+            label = HTML("Next &#9654;"),
+            style = "background: #3498db; color: white; border: none; border-radius: 4px; padding: 8px 16px; font-size: 14px;"
+          )
         ),
         # Main image (use web-accessible path)
         tags$img(
-          src = sprintf("images/%s", current_img),
+          src = safe_src,
           style = "max-width: 100%; height: auto; border-radius: 4px; cursor: zoom-in;",
-          onclick = sprintf("window.open('images/%s', '_blank')", current_img),
+          onclick = sprintf("window.open('%s', '_blank')", safe_src),
           alt = img_name
         )
       ),
@@ -3603,22 +3887,23 @@ server <- function(input, output, session) {
     
     HTML(paste0(
       "<div>",
-      "<div class='row' style='margin-bottom:0;'>",
-      "  <div class='col-sm-3' style='text-align:center;'>",
-      "    <div style='font-size:3em;font-weight:bold;color:#3498db;'>", n_stations, "</div>",
-      "    <div style='font-size:1.1em;color:#7f8c8d;'>Stations</div>",
+      "<!-- Flexbox container for horizontal KPI boxes -->",
+      "<div style='display: flex; justify-content: space-between; align-items: center; gap: 20px; flex-wrap: wrap; margin-bottom: 20px;'>",
+      "  <div style='flex: 1; min-width: 200px; text-align: center; padding: 20px; background: rgba(52, 152, 219, 0.05); border-radius: 8px; border-top: 3px solid #3498db;'>",
+      "    <div style='font-size: 3em; font-weight: bold; color: #3498db;'>", n_stations, "</div>",
+      "    <div style='font-size: 1.1em; color: #7f8c8d; margin-top: 10px;'>Stations</div>",
       "  </div>",
-      "  <div class='col-sm-3' style='text-align:center;'>",
-      "    <div style='font-size:3em;font-weight:bold;color:#e74c3c;'>", n_women, "</div>",
-      "    <div style='font-size:1.1em;color:#7f8c8d;'>Women Records</div>",
+      "  <div style='flex: 1; min-width: 200px; text-align: center; padding: 20px; background: rgba(231, 76, 60, 0.05); border-radius: 8px; border-top: 3px solid #e74c3c;'>",
+      "    <div style='font-size: 3em; font-weight: bold; color: #e74c3c;'>", n_women, "</div>",
+      "    <div style='font-size: 1.1em; color: #7f8c8d; margin-top: 10px;'>Women Records</div>",
       "  </div>",
-      "  <div class='col-sm-3' style='text-align:center;'>",
-      "    <div style='font-size:3em;font-weight:bold;color:#f39c12;'>", n_troops, "</div>",
-      "    <div style='font-size:1.1em;color:#7f8c8d;'>Troop Records</div>",
+      "  <div style='flex: 1; min-width: 200px; text-align: center; padding: 20px; background: rgba(243, 156, 18, 0.05); border-radius: 8px; border-top: 3px solid #f39c12;'>",
+      "    <div style='font-size: 3em; font-weight: bold; color: #f39c12;'>", n_troops, "</div>",
+      "    <div style='font-size: 1.1em; color: #7f8c8d; margin-top: 10px;'>Troop Records</div>",
       "  </div>",
-      "  <div class='col-sm-3' style='text-align:center;'>",
-      "    <div style='font-size:3em;font-weight:bold;color:#9b59b6;'>", n_docs, "</div>",
-      "    <div style='font-size:1.1em;color:#7f8c8d;'>Source Documents</div>",
+      "  <div style='flex: 1; min-width: 200px; text-align: center; padding: 20px; background: rgba(155, 89, 182, 0.05); border-radius: 8px; border-top: 3px solid #9b59b6;'>",
+      "    <div style='font-size: 3em; font-weight: bold; color: #9b59b6;'>", n_docs, "</div>",
+      "    <div style='font-size: 1.1em; color: #7f8c8d; margin-top: 10px;'>Source Documents</div>",
       "  </div>",
       "</div>",
       missing_summary,
@@ -3719,23 +4004,59 @@ server <- function(input, output, session) {
   output$story_acts_timeline <- renderUI({
     HTML("
       <div style='padding: 20px;'>
-        <div style='margin-bottom: 30px;'>
-          <div style='font-size: 1.5em; font-weight: bold; color: #3498db;'>1864 - Act XXII</div>
-          <div style='font-size: 1.1em; color: #555; margin-top: 10px;'>
-            Established compulsory registration and examination of women in cantonment areas.
+        <!-- Horizontal timeline container -->
+        <div style='display: flex; gap: 20px; overflow-x: auto; padding-bottom: 20px;'>
+          
+          <!-- 1864 Act -->
+          <div style='min-width: 300px; flex: 1; padding: 20px; background: rgba(231, 76, 60, 0.05); border-top: 4px solid #e74c3c; border-radius: 4px;'>
+            <div style='font-size: 1.4em; font-weight: bold; color: #e74c3c; margin-bottom: 10px;'>1864</div>
+            <div style='font-size: 1.1em; font-weight: 600; color: #2c3e50; margin-bottom: 12px;'>Cantonments Act XXII</div>
+            <div style='font-size: 0.9em; color: #34495e; line-height: 1.6;'>
+              <strong style='color: #e74c3c;'>\"For protection of the health of the troops\"</strong>
+              <br><br>
+              The first formal attempt to translate moral and medical anxieties into legal regulation. Granted local governments power to make rules \"for inspecting and controlling houses of ill-fame.\" Powers could be \"extended beyond the limits of Cantonments.\"
+              <br><br>
+              Though framed as sanitary, this language was fundamentally disciplinary—justifying military authority's intrusion into civilian space.
+            </div>
           </div>
-        </div>
-        <div style='margin-bottom: 30px;'>
-          <div style='font-size: 1.5em; font-weight: bold; color: #e67e22;'>1868 - Act XIV</div>
-          <div style='font-size: 1.1em; color: #555; margin-top: 10px;'>
-            Expanded surveillance to civilian areas and increased penalties for non-compliance.
+          
+          <!-- 1868 Act -->
+          <div style='min-width: 300px; flex: 1; padding: 20px; background: rgba(52, 152, 219, 0.05); border-top: 4px solid #3498db; border-radius: 4px;'>
+            <div style='font-size: 1.4em; font-weight: bold; color: #3498db; margin-bottom: 10px;'>1868</div>
+            <div style='font-size: 1.1em; font-weight: 600; color: #2c3e50; margin-bottom: 12px;'>Contagious Diseases Act XIV</div>
+            <div style='font-size: 0.9em; color: #34495e; line-height: 1.6;'>
+              <strong style='color: #3498db;'>Creating the Administrative Category</strong>
+              <br><br>
+              Codified the regime through official legislation. Required women to register: \"no woman shall carry on the business of a common prostitute...without being registered under this Act.\"
+              <br><br>
+              The law created an administrative category—\"prostitute\" became a bureaucratic identity produced through registration and inspection. Women faced \"periodical medical examination\"; failure meant fines, imprisonment, or forced confinement in certified hospitals.
+            </div>
           </div>
-        </div>
-        <div style='margin-bottom: 30px;'>
-          <div style='font-size: 1.5em; font-weight: bold; color: #9b59b6;'>1880 - Act III</div>
-          <div style='font-size: 1.1em; color: #555; margin-top: 10px;'>
-            Introduced after repeal campaigns, maintained surveillance under the guise of 'voluntary' registration.
+          
+          <!-- 1880 Act -->
+          <div style='min-width: 300px; flex: 1; padding: 20px; background: rgba(155, 89, 182, 0.05); border-top: 4px solid #9b59b6; border-radius: 4px;'>
+            <div style='font-size: 1.4em; font-weight: bold; color: #9b59b6; margin-bottom: 10px;'>1880</div>
+            <div style='font-size: 1.1em; font-weight: 600; color: #2c3e50; margin-bottom: 12px;'>Cantonment Act III</div>
+            <div style='font-size: 0.9em; color: #34495e; line-height: 1.6;'>
+              <strong style='color: #9b59b6;'>\"Voluntary\" Compliance</strong>
+              <br><br>
+              Introduced after British repeal campaigns exposed moral tensions of compulsory examination. Softened language—women \"attend voluntarily\"—yet registration, detention, and medical authority remained unchanged.
+              <br><br>
+              \"Station\" replaced \"cantonment\", expanding Acts to ports, trading centres, and railway towns. What appeared as liberalization was actually expansion—surveillance under the guise of reform.
+            </div>
           </div>
+          
+          <!-- 1889 Act -->
+          <div style='min-width: 300px; flex: 1; padding: 20px; background: rgba(243, 156, 18, 0.05); border-top: 4px solid #f39c12; border-radius: 4px;'>
+            <div style='font-size: 1.4em; font-weight: bold; color: #f39c12; margin-bottom: 10px;'>1889</div>
+            <div style='font-size: 1.1em; font-weight: 600; color: #2c3e50; margin-bottom: 12px;'>Cantonment Act</div>
+            <div style='font-size: 0.9em; color: #34495e; line-height: 1.6;'>
+              Consolidated and refined earlier legislation, strengthening cantonment administration while maintaining medical surveillance.
+              <br><br>
+              By this point, the lock hospital had become a permanent feature of colonial governance—a network transforming women's bodies into bureaucratic evidence of disease and disorder.
+            </div>
+          </div>
+          
         </div>
       </div>
     ")
