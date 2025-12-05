@@ -793,14 +793,14 @@ server <- function(input, output, session) {
     message(sprintf("Railway overlay observer triggered: show_railways=%s year=%s", 
                     as.character(show_rail), as.character(input$year_slider)))
     
-    if (show_rail && !is.null(railway_lines) && !is.null(railway_stations)) {
+    if (show_rail && !is.null(railway_stations)) {
       # Delegate drawing to centralized helper (handles filtering by year and clearing groups)
-      message("Attempting to draw railway overlays...")
+      message("Attempting to draw railway stations...")
       tryCatch({
         draw_rail_overlays(input$year_slider)
-        message("Railway overlays drawn successfully")
+        message("Railway stations drawn successfully")
       }, error = function(e) {
-        message(sprintf("ERROR drawing railway overlays: %s", e$message))
+        message(sprintf("ERROR drawing railway stations: %s", e$message))
       })
     } else {
       message("Clearing railway layers from map")
