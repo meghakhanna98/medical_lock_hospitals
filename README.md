@@ -12,6 +12,36 @@ This application provides an interactive interface to explore the `medical_lock_
 - **Hospital operations data** (legal regimes, Acts in force)
 - **362 qualitative hospital notes** (inspection reports, committee activities)
 - **Geographic data** with corrected coordinates for British India and Burma
+- **Railway network data** with 46 historical railway stations showing infrastructure expansion patterns
+
+## Current Research Applications
+
+This dashboard supports several research inquiries into colonial medical surveillance and gendered violence:
+
+### 1. **Geospatial Analysis of Surveillance Networks**
+- Mapping Lock Hospital distribution across military cantonments, ports, and railway junctions
+- Analyzing proximity relationships between hospitals, troop stations, and transportation hubs
+- Visualizing the expansion of surveillance infrastructure over time (1873-1889)
+
+### 2. **Railway Infrastructure and Medical Control**
+- Examining how railway expansion facilitated the spread of Lock Hospital surveillance
+- Identifying stations located near railway junctions vs. isolated military posts
+- Understanding the role of transportation networks in colonial medical governance
+
+### 3. **Legal Geography and the Contagious Diseases Acts**
+- Tracking implementation of different Acts (1864, 1868, 1880) across regions
+- Comparing surveillance intensity under different legal regimes
+- Analyzing voluntary vs. compulsory registration systems
+
+### 4. **Temporal Patterns in Medical Surveillance**
+- Year-by-year analysis of admission, registration, and punishment data
+- Identifying peaks and declines in surveillance activity
+- Correlating policy changes with operational patterns on the ground
+
+### 5. **Qualitative Analysis of Administrative Practice**
+- Textual analysis of 362 inspection reports and committee notes
+- Understanding local variations in enforcement and resistance
+- Examining the language of colonial medical authority
 
 ## Repository layout
 
@@ -33,14 +63,16 @@ To keep the Explorer uncluttered, most maintenance scripts, logs, and one-off ex
 
 ## Features
 
-### �️ Interactive Geographic Map
+### 🗺️ Interactive Geographic Map
 - **Temporal slider**: Explore data year-by-year from 1873 to 1889
 - **Geospatial visualization**: All 56 Lock Hospital stations mapped with corrected coordinates
+- **Railway network overlay**: 46 historical railway stations showing infrastructure expansion (lines removed, stations retained)
 - **Circle sizing**: Proportional to average registered women at each station
 - **Color coding**: Stations colored by region (Burma, Punjab, Madras, Bengal, etc.)
-- **Interactive popups**: Click stations to see detailed admission data
+- **Interactive popups**: Click stations to see detailed admission data, click railway stations for historical/modern names
 - **Data filtering**: Map shows only stations with actual women's data for selected year
 - **Smart display**: Decimal formatting removed for cleaner presentation
+- **Multi-layer visualization**: Toggle railway stations on/off to compare medical and transportation networks
 
 ### � Hospital Notes Page
 - **Qualitative data explorer**: Browse all 362 hospital inspection notes
@@ -61,7 +93,7 @@ To keep the Explorer uncluttered, most maintenance scripts, logs, and one-off ex
 
 ## Database Schema
 
-The application works with seven main tables:
+The application works with seven main tables plus geospatial railway data:
 
 1. **documents** - Source documents (Colonial Medical Annual Reports)
 2. **stations** - 59 Lock Hospital stations with corrected geographic coordinates
@@ -70,6 +102,27 @@ The application works with seven main tables:
 5. **troops** - Military venereal disease data (300 records)
 6. **hospital_operations** - Legal regimes and Acts in force by station-year
 7. **hospital_notes** - 362 qualitative inspection reports with textual analysis
+
+### Railway Infrastructure Data
+
+The application includes historical railway network data visualized on the interactive map:
+
+- **Railway stations shapefile** (`data_raw/railway_stations_extended.shp`): 46 historical railway stations
+  - `orig_name`: Historical station names from colonial records
+  - `modern_nam`: Modern station names
+  - `lat`, `lon`: Geographic coordinates (WGS84)
+  
+- **Railway network context**: While railway lines are no longer displayed (removed for clarity), the station markers show the infrastructure backbone that facilitated:
+  - Movement of military personnel across cantonments
+  - Expansion of Lock Hospital surveillance to railway junctions
+  - Connection between port cities, garrison towns, and inland stations
+  - Geographic reach of colonial medical governance beyond traditional military bases
+
+**Research applications:**
+- Proximity analysis between Lock Hospitals and railway infrastructure
+- Understanding the role of transportation in surveillance network expansion
+- Comparing coastal/port stations vs. inland railway junction stations
+- Analyzing temporal correlation between railway expansion and hospital establishment
 
 ### Data Coverage Summary
 

@@ -159,19 +159,19 @@ ui <- dashboardPage(
         ),
         
         # Section 1: Introduction - About the Dataset
-        div(class = "story-section", style = "background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); color: white;",
+        div(class = "story-section", style = "background: linear-gradient(135deg, #8B7355 0%, #6B5745 100%), url('data:image/svg+xml;base64,PHN2ZyB3aWR0aD0iNjAiIGhlaWdodD0iNjAiIHhtbG5zPSJodHRwOi8vd3d3LnczLm9yZy8yMDAwL3N2ZyI+PGRlZnM+PHBhdHRlcm4gaWQ9InBhdHRlcm4iIHBhdHRlcm5Vbml0cz0idXNlclNwYWNlT25Vc2UiIHdpZHRoPSI2MCIgaGVpZ2h0PSI2MCI+PHBhdGggZD0iTTAgMEw2MCA2ME0wIDYwTDYwIDAiIHN0cm9rZT0icmdiYSgyNTUsMjU1LDI1NSwwLjAzKSIgc3Ryb2tlLXdpZHRoPSIwLjUiLz48L3BhdHRlcm4+PC9kZWZzPjxyZWN0IHdpZHRoPSIxMDAlIiBoZWlnaHQ9IjEwMCUiIGZpbGw9InVybCgjcGF0dGVybikiLz48L3N2Zz4='); background-blend-mode: multiply; border-top: 4px solid #D4AF37; border-bottom: 4px solid #D4AF37; box-shadow: inset 0 0 50px rgba(0,0,0,0.3); color: #F5E6D3;",
           div(class = "story-content",
-            h1(class = "story-title", style = "color: white;", "Governing Diseases and Sexuality in Colonial India"),
-            p(class = "story-text", style = "color: rgba(255,255,255,0.95);",
+            h1(class = "story-title", style = "color: #F5E6D3; text-shadow: 2px 2px 4px rgba(0,0,0,0.5); font-family: 'Georgia', serif; letter-spacing: 1px;", "Governing Diseases and Sexuality in Colonial India"),
+            p(class = "story-text", style = "color: #F5E6D3; text-shadow: 1px 1px 2px rgba(0,0,0,0.3);",
               "This dataset is built from nineteenth-century Lock Hospital Reports and Sanitary Commissioner's Reports produced under British rule in India. These records were part of a larger administrative effort to monitor women categorized as \"registered prostitutes\" under the Contagious Diseases Acts. Through these reports, the colonial state sought to control the spread of venereal disease among soldiers by transforming women's bodies into objects of record and inspection."
             ),
-            p(class = "story-text", style = "color: rgba(255,255,255,0.95);",
+            p(class = "story-text", style = "color: #F5E6D3; text-shadow: 1px 1px 2px rgba(0,0,0,0.3);",
               "The figures in these documents (women admitted, discharged, fined or imprisoned, soldiers treated for disease, hospital openings and closures) show how public health became a language of governance. Medical management was tightly bound to moral discipline and imperial control."
             ),
-            p(class = "story-text", style = "color: rgba(255,255,255,0.95);",
+            p(class = "story-text", style = "color: #F5E6D3; text-shadow: 1px 1px 2px rgba(0,0,0,0.3);",
               "Each entry in this dataset reflects the bureaucratic structure of the colonial state: the staffing of hospitals, the geography of cantonments, and the regular counting of \"registered\" and \"unregistered\" women. Taken together, these numbers allow us to see how the colonial government converted everyday life into data, turning acts of care into mechanisms of surveillance."
             ),
-            p(class = "story-text", style = "color: rgba(255,255,255,0.95);",
+            p(class = "story-text", style = "color: #F5E6D3; text-shadow: 1px 1px 2px rgba(0,0,0,0.3);",
               "Rather than treating these figures as neutral statistics, this project reads them as evidence of how medicine, morality, and governance became intertwined in the making of empire."
             )
           )
@@ -291,7 +291,7 @@ ui <- dashboardPage(
               
               # Layer toggles
               h5("Map Layers", style = "font-weight: bold; margin-bottom: 10px;"),
-              checkboxInput("show_railways", "Railway Lines & Stations", value = TRUE),
+              checkboxInput("show_railways", "Railway Stations", value = TRUE),
 
               hr(),
               
@@ -326,27 +326,14 @@ ui <- dashboardPage(
           )
         ),
         fluidRow(
-          column(6,
-            box(
-              title = "Railway Lines in Operation",
-              status = "info",
-              solidHeader = TRUE,
-              width = 12,
-              collapsible = TRUE,
-              collapsed = TRUE,
-              DT::dataTableOutput("railway_lines_table")
-            )
-          ),
-          column(6,
-            box(
-              title = "Railway Stations",
-              status = "info",
-              solidHeader = TRUE,
-              width = 12,
-              collapsible = TRUE,
-              collapsed = TRUE,
-              DT::dataTableOutput("railway_stations_table")
-            )
+          box(
+            title = "Railway Stations",
+            status = "info",
+            solidHeader = TRUE,
+            width = 12,
+            collapsible = TRUE,
+            collapsed = TRUE,
+            DT::dataTableOutput("railway_stations_table")
           )
         )
       ),
@@ -521,15 +508,8 @@ server <- function(input, output, session) {
   })
   
   # Load railway shapefiles (MOVED INSIDE SERVER FUNCTION)
-  railway_lines <- tryCatch({
-    message("Loading railway_lines.shp...")
-    lines <- st_read("data_raw/railway_lines.shp", quiet = TRUE)
-    message(sprintf("SUCCESS: railway_lines loaded with %d features", nrow(lines)))
-    lines
-  }, error = function(e) {
-    message("ERROR loading railway lines shapefile: ", e$message)
-    NULL
-  })
+  # Railway lines removed - only stations are loaded
+  railway_lines <- NULL
   
   railway_stations <- tryCatch({
     message("Loading railway_stations_extended.shp...")
@@ -541,82 +521,8 @@ server <- function(input, output, session) {
     NULL
   })
 
-  # Enrich railway stations with attributes from nearest railway line
-  if (!is.null(railway_lines) && !is.null(railway_stations)) {
-    try({
-      message("Enriching railway stations with nearest line attributes...")
-      rl <- st_transform(railway_lines, 4326)
-      rs <- st_transform(railway_stations, 4326)
-      idx <- sf::st_nearest_feature(rs, rl)
-      rs$nearest_section <- rl$Section[idx]
-      rs$nearest_railway <- rl$Railway[idx]
-      rs$nearest_year <- rl$Year[idx]
-      railway_stations <- rs
-      message("Railway stations enriched successfully")
-    }, silent = TRUE)
-  }
-
-  # Load override CSV if present
-  override_path <- "data_raw/railway_lines_override.csv"
-  if (file.exists(override_path)) {
-    try({
-      message("Loading railway lines override from ", override_path)
-      ov <- utils::read.csv(override_path, stringsAsFactors = FALSE)
-      new_lines <- list()
-      if (nrow(ov) > 0 && "station_seq" %in% names(ov)) {
-        for (i in seq_len(nrow(ov))) {
-          row <- ov[i, , drop = FALSE]
-          stations <- strsplit(as.character(row$station_seq), ",")[[1]]
-          stations <- trimws(stations)
-          coords <- lapply(stations, function(s) {
-            m <- which(tolower(railway_stations$orig_name) == tolower(s) | tolower(railway_stations$modern_nam) == tolower(s))
-            if (length(m) == 0) return(NULL)
-            c(railway_stations$lon[m[1]], railway_stations$lat[m[1]])
-          })
-          coords <- Filter(Negate(is.null), coords)
-          if (length(coords) >= 2) {
-            mat <- do.call(rbind, coords)
-            ls <- sf::st_linestring(mat)
-            sfc <- sf::st_sfc(ls, crs = 4326)
-            sfobj <- sf::st_sf(data.frame(Section = row$Section, Railway = row$Railway, Year = row$Year, stringsAsFactors = FALSE), geometry = sfc)
-            new_lines[[length(new_lines) + 1]] <- sfobj
-          }
-        }
-      } else if (nrow(ov) > 0 && all(c("station","seq","Section","Railway") %in% names(ov))) {
-        grp_keys <- unique(paste(ov$Section, ov$Railway, ov$Year, sep = "__"))
-        for (g in grp_keys) {
-          parts <- strsplit(g, "__", fixed = TRUE)[[1]]
-          sec <- parts[1]; rail <- parts[2]; yr <- parts[3]
-          sub <- ov[ov$Section == sec & ov$Railway == rail & as.character(ov$Year) == as.character(yr), ]
-          sub <- sub[order(as.numeric(sub$seq)), ]
-          stations <- trimws(as.character(sub$station))
-          coords <- lapply(stations, function(s) {
-            m <- which(tolower(railway_stations$orig_name) == tolower(s) | tolower(railway_stations$modern_nam) == tolower(s))
-            if (length(m) == 0) return(NULL)
-            c(railway_stations$lon[m[1]], railway_stations$lat[m[1]])
-          })
-          coords <- Filter(Negate(is.null), coords)
-          if (length(coords) >= 2) {
-            mat <- do.call(rbind, coords)
-            ls <- sf::st_linestring(mat)
-            sfc <- sf::st_sfc(ls, crs = 4326)
-            sfobj <- sf::st_sf(data.frame(Section = sec, Railway = rail, Year = yr, stringsAsFactors = FALSE), geometry = sfc)
-            new_lines[[length(new_lines) + 1]] <- sfobj
-          }
-        }
-      }
-
-      if (length(new_lines) > 0) {
-        new_sf <- do.call(rbind, new_lines)
-        if (is.null(railway_lines)) {
-          railway_lines <- new_sf
-        } else {
-          railway_lines <- rbind(railway_lines, new_sf)
-        }
-        message("Appended ", length(new_lines), " override railway lines from CSV")
-      }
-    }, silent = TRUE)
-  }
+  # Railway line enrichment and override CSV loading removed
+  # Stations are displayed as-is without line attributes
 
   # On app start, set the year slider to 1873 (earliest year with data)
   try({
@@ -708,78 +614,22 @@ server <- function(input, output, session) {
     map_df
   })
   
-  # Helper: draw railway overlays (lines + stations) for a given year
+  # Helper: draw railway stations overlay (lines removed)
     draw_rail_overlays <- function(selected_year) {
       # defensive
       if (is.null(selected_year)) return(invisible(NULL))
-      if (is.null(railway_lines) && is.null(railway_stations)) return(invisible(NULL))
+      if (is.null(railway_stations)) return(invisible(NULL))
 
-      message(sprintf("draw_rail_overlays() called for year: %s", as.character(selected_year)))
+      message(sprintf("draw_rail_overlays() called for year: %s (stations only)", as.character(selected_year)))
       
-      # Debug: check railway_lines state
-      if (is.null(railway_lines)) {
-        message("railway_lines is NULL - no lines to draw")
-        railways_filtered <- NULL
-      } else {
-        message(sprintf("railway_lines has %d rows", nrow(railway_lines)))
-        # prepare filtered lines
-        rail_year <- suppressWarnings(as.numeric(as.character(railway_lines$Year)))
-        message(sprintf("rail_year values: %s", paste(head(rail_year, 10), collapse=", ")))
-        railways_filtered <- tryCatch({
-          filtered <- railway_lines[ ( !is.na(rail_year) & rail_year <= selected_year ) | is.na(rail_year), ]
-          message(sprintf("After filtering by year <= %s: %d rows", selected_year, nrow(filtered)))
-          filtered
-        }, error = function(e) {
-          message(sprintf("Error filtering railway_lines: %s", e$message))
-          railway_lines
-        })
-      }
-
-      # prepare filtered stations based on nearest_year (if available)
+      # Show all stations (no year filtering since enrichment was removed)
       railway_stations_filtered <- railway_stations
-      if (!is.null(railway_stations) && nrow(railway_stations) > 0) {
-        ny <- tryCatch({ suppressWarnings(as.numeric(as.character(railway_stations$nearest_year))) }, error = function(e) rep(NA, nrow(railway_stations)))
-        railway_stations_filtered <- tryCatch({
-          railway_stations[ ( !is.na(ny) & ny <= selected_year ) | is.na(ny), ]
-        }, error = function(e) railway_stations)
-      }
 
       proxy <- leafletProxy("map")
       proxy %>% clearGroup("railways") %>% clearGroup("railway_stations")
 
-      if (!is.null(railways_filtered) && nrow(railways_filtered) > 0) {
-        message(sprintf("Drawing railway lines - filtered rows: %d", nrow(railways_filtered)))
-        
-        # Draw lines manually using lng/lat pairs from sf geometry
-        for (i in seq_len(nrow(railways_filtered))) {
-          tryCatch({
-            line_coords <- st_coordinates(railways_filtered[i, ])
-            if (nrow(line_coords) >= 2) {
-              proxy <- proxy %>% addPolylines(
-                lng = line_coords[, "X"],
-                lat = line_coords[, "Y"],
-                color = "#d62728",
-                weight = 3,
-                opacity = 0.8,
-                group = "railways",
-                popup = paste0(
-                  "<b>Railway Section</b><br>",
-                  "Section: ", railways_filtered$Section[i], "<br>",
-                  "Line: ", railways_filtered$Railway[i], "<br>",
-                  "Year Opened: ", railways_filtered$Year[i]
-                ),
-                label = paste0(railways_filtered$Section[i], " - ", railways_filtered$Railway[i])
-              )
-            }
-          }, error = function(e) {
-            message(sprintf("Error drawing line %d: %s", i, e$message))
-          })
-        }
-        message(sprintf("Successfully processed %d railway lines", nrow(railways_filtered)))
-      }
-
       if (!is.null(railway_stations_filtered) && nrow(railway_stations_filtered) > 0) {
-        message(sprintf("railway_stations_filtered rows: %d", nrow(railway_stations_filtered)))
+        message(sprintf("Drawing railway stations: %d markers", nrow(railway_stations_filtered)))
         proxy %>% addCircleMarkers(
           data = railway_stations_filtered,
           radius = 4,
@@ -791,10 +641,7 @@ server <- function(input, output, session) {
           popup = ~paste0(
             "<b>Railway Station</b><br>",
             "Historic: ", orig_name, "<br>",
-            "Modern: ", modern_nam,
-            if (!is.null(nearest_section)) paste0("<br><b>Section:</b> ", nearest_section) else "",
-            if (!is.null(nearest_railway)) paste0("<br><b>Line:</b> ", nearest_railway) else "",
-            if (!is.null(nearest_year)) paste0("<br><b>Year Opened:</b> ", nearest_year) else ""
+            "Modern: ", modern_nam
           ),
           label = ~orig_name
         )
@@ -1121,44 +968,6 @@ server <- function(input, output, session) {
     )
   })
   
-  # Railway lines table - shows lines operational in selected year
-  output$railway_lines_table <- DT::renderDataTable({
-    req(input$year_slider)
-    
-    if (is.null(railway_lines)) {
-      return(DT::datatable(data.frame(Message = "Railway data not available")))
-    }
-    
-    selected_year <- input$year_slider
-    railways_filtered <- railway_lines[railway_lines$Year <= selected_year, ]
-    
-    if (nrow(railways_filtered) == 0) {
-      return(DT::datatable(data.frame(Message = paste("No railways operational by", selected_year))))
-    }
-    
-    # Convert to regular dataframe and select columns
-    display_data <- as.data.frame(railways_filtered) %>%
-      dplyr::select(
-        Section = Section,
-        Railway = Railway,
-        `Year Opened` = Year,
-        `Distance (miles)` = Miles,
-        From = start_name,
-        To = end_name
-      ) %>%
-      dplyr::arrange(`Year Opened`)
-    
-    DT::datatable(
-      display_data,
-      options = list(
-        pageLength = 10,
-        scrollX = FALSE,
-        dom = 'ftip'
-      ),
-      rownames = FALSE
-    )
-  })
-  
   # Railway stations table
   output$railway_stations_table <- DT::renderDataTable({
     if (is.null(railway_stations)) {
@@ -1187,27 +996,6 @@ server <- function(input, output, session) {
   })
   
   # ===== END INTERACTIVE MAP FUNCTIONALITY =====
-  
-  # Image Gallery Navigation
-  current_image_index <- reactiveVal(1)
-  
-  observeEvent(input$next_image, {
-    img_dir <- "content/images_safe"
-    img_files <- list.files(img_dir, pattern = "\\.(jpg|jpeg|png|gif|webp)$", ignore.case = TRUE)
-    current <- current_image_index()
-    if (length(img_files) > 0 && current < length(img_files)) {
-      current_image_index(current + 1)
-    }
-  }, ignoreInit = TRUE, priority = 1)
-  
-  observeEvent(input$prev_image, {
-    img_dir <- "content/images_safe"
-    img_files <- list.files(img_dir, pattern = "\\.(jpg|jpeg|png|gif|webp)$", ignore.case = TRUE)
-    current <- current_image_index()
-    if (length(img_files) > 0 && current > 1) {
-      current_image_index(current - 1)
-    }
-  }, ignoreInit = TRUE, priority = 1)
   
   # Close connection when app stops
   onStop(function() {
@@ -2190,16 +1978,6 @@ server <- function(input, output, session) {
                style = "color: #95a5a6; font-style: italic;"))
     }
     
-    # Current image index (use reactiveVal current_image_index)
-    current_idx <- current_image_index()
-    if (current_idx > length(img_files)) current_idx <- 1
-    
-    message(sprintf("Current image index: %d", current_idx))
-    
-    # Current image
-    current_img <- img_files[current_idx]
-    img_path <- file.path(img_dir, current_img)
-    
     # Image descriptions
     descriptions <- list(
       "act_xxvi_1868_lock_hospitals" = "Act No. XXVI of 1868: Legislation enabling municipalities to provide for Lock-Hospitals. This act expanded the state's power to establish and maintain lock hospitals for the prevention of contagious venereal disease.",
@@ -2208,54 +1986,41 @@ server <- function(input, output, session) {
       "lock_hospital_buildings" = "Architectural renderings of Lock Hospital buildings, showing the physical infrastructure of medical surveillance. These institutions combined medical care with mechanisms of control and containment."
     )
     
-    img_name <- gsub("\\.(jpg|jpeg|png|gif|webp)$", "", current_img, ignore.case = TRUE)
-    img_description <- descriptions[[img_name]] %||% img_name
+    # Create horizontal scrollable gallery like Acts timeline
+    gallery_html <- "<div style='padding: 20px;'>
+      <div style='display: flex; gap: 20px; overflow-x: auto; padding-bottom: 20px;'>"
     
-  # Create navigation UI
-  # URL-encode filename to build a safe src for the <img> tag
-  safe_src <- sprintf("images/%s", utils::URLencode(current_img, reserved = TRUE))
-
-  div(
-      style = "max-width: 800px; margin: 0 auto; text-align: center;",
-      # Image counter
-      div(
-        style = "margin-bottom: 15px; font-size: 14px; color: #7f8c8d;",
-        sprintf("Image %d of %d", current_idx, length(img_files))
-      ),
-      # Image container with navigation
-      div(
-        style = "position: relative; margin: 20px 0; background: #fff; padding: 60px 20px 20px 20px; border-radius: 8px; box-shadow: 0 2px 8px rgba(0,0,0,0.1);",
-        # Navigation buttons row at top
-        div(
-          style = "position: absolute; top: 15px; left: 50%; transform: translateX(-50%); z-index: 2; display: flex; gap: 15px;",
-          actionButton(
-            inputId = "prev_image",
-            label = HTML("&#9664; Previous"),
-            style = "background: #3498db; color: white; border: none; border-radius: 4px; padding: 8px 16px; font-size: 14px;"
-          ),
-          actionButton(
-            inputId = "next_image",
-            label = HTML("Next &#9654;"),
-            style = "background: #3498db; color: white; border: none; border-radius: 4px; padding: 8px 16px; font-size: 14px;"
-          )
-        ),
-        # Main image (use web-accessible path)
-        tags$img(
-          src = safe_src,
-          style = "max-width: 100%; height: auto; border-radius: 4px; cursor: zoom-in;",
-          onclick = sprintf("window.open('%s', '_blank')", safe_src),
-          alt = img_name
-        )
-      ),
-      # Image caption with description
-      div(
-        style = "margin-top: 15px; padding: 20px; background: #f8f9fa; border-radius: 4px;",
-        h4(tools::toTitleCase(gsub("_", " ", img_name)), 
-           style = "margin: 0 0 10px 0; color: #2c3e50; font-size: 18px; font-weight: 600;"),
-        p(img_description,
-          style = "margin: 0; color: #34495e; font-size: 14px; line-height: 1.6;")
-      )
-    )
+    # Color palette for cards
+    colors <- c('#e74c3c', '#3498db', '#9b59b6', '#f39c12', '#1abc9c', '#34495e')
+    
+    for (i in seq_along(img_files)) {
+      img_file <- img_files[i]
+      img_name <- gsub("\\.(jpg|jpeg|png|gif|webp)$", "", img_file, ignore.case = TRUE)
+      img_description <- descriptions[[img_name]] %||% tools::toTitleCase(gsub("_", " ", img_name))
+      safe_src <- sprintf("images/%s", utils::URLencode(img_file, reserved = TRUE))
+      card_color <- colors[((i - 1) %% length(colors)) + 1]
+      
+      gallery_html <- paste0(gallery_html, sprintf("
+        <div style='min-width: 400px; flex: 1; padding: 20px; background: rgba(%s, 0.05); border-top: 4px solid %s; border-radius: 4px;'>
+          <div style='font-size: 1.1em; font-weight: 600; color: #2c3e50; margin-bottom: 12px;'>%s</div>
+          <img src='%s' style='width: 100%%; height: 200px; object-fit: cover; border-radius: 4px; margin-bottom: 12px; cursor: pointer;' onclick='window.open(\"%s\", \"_blank\");' />
+          <div style='font-size: 0.9em; color: #34495e; line-height: 1.6;'>%s</div>
+        </div>",
+        # Convert hex to RGB for rgba
+        paste(col2rgb(card_color), collapse = ","),
+        card_color,
+        tools::toTitleCase(gsub("_", " ", img_name)),
+        safe_src,
+        safe_src,
+        img_description
+      ))
+    }
+    
+    gallery_html <- paste0(gallery_html, "
+      </div>
+    </div>")
+    
+    HTML(gallery_html)
   })
 
   # ---------------------
@@ -3455,6 +3220,48 @@ server <- function(input, output, session) {
         opacity = 0.8
       )
   })
+  
+  # Quality Summary Table
+  output$quality_summary <- DT::renderDataTable({
+    tables <- c("women_admission", "troops", "hospital_operations", "stations")
+    total_records <- sapply(tables, function(t) {
+      dbGetQuery(conn(), paste("SELECT COUNT(*) as count FROM", t))$count
+    })
+    complete_records <- sapply(tables, function(t) {
+      # Check what columns exist in the table first
+      cols <- dbGetQuery(conn(), paste0("PRAGMA table_info(", t, ")"))$name
+      
+      if (t %in% c("women_admission", "troops")) {
+        if ("doc_id" %in% cols && "source_name" %in% cols) {
+          dbGetQuery(conn(), paste("SELECT COUNT(*) as count FROM", t, "WHERE doc_id IS NOT NULL AND source_name IS NOT NULL"))$count
+        } else {
+          dbGetQuery(conn(), paste("SELECT COUNT(*) as count FROM", t))$count
+        }
+      } else if (t == "hospital_operations") {
+        # hospital_operations now only has station, year, act
+        # Consider complete if station and year are not null
+        if ("station" %in% cols && "year" %in% cols) {
+          dbGetQuery(conn(), paste("SELECT COUNT(*) as count FROM", t, "WHERE station IS NOT NULL AND year IS NOT NULL"))$count
+        } else {
+          dbGetQuery(conn(), paste("SELECT COUNT(*) as count FROM", t))$count
+        }
+      } else if (t == "stations") {
+        dbGetQuery(conn(), paste("SELECT COUNT(*) as count FROM", t, "WHERE name IS NOT NULL"))$count
+      } else {
+        if ("unique_id" %in% cols) {
+          dbGetQuery(conn(), paste("SELECT COUNT(*) as count FROM", t, "WHERE unique_id IS NOT NULL"))$count
+        } else if ("hid" %in% cols) {
+          dbGetQuery(conn(), paste("SELECT COUNT(*) as count FROM", t, "WHERE hid IS NOT NULL"))$count
+        } else {
+          # Fallback: consider all records complete
+          dbGetQuery(conn(), paste("SELECT COUNT(*) as count FROM", t))$count
+        }
+      }
+    })
+    quality_data <- data.frame(Table = tables, Total_Records = total_records, Complete_Records = complete_records)
+    quality_data$Completeness <- round(quality_data$Complete_Records / quality_data$Total_Records * 100, 1)
+    quality_data
+  }, options = list(pageLength = 6, dom = 't'))
   
   # Update markers when Act filter changes (without re-rendering entire map)
   observe({
