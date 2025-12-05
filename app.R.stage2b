@@ -65,10 +65,6 @@ for (f in src_files) {
 }
 shiny::addResourcePath("images", img_safe_dir)
 
-# Toggle to disable heavy analytics and long-running observers while debugging UI
-# Set to TRUE to enable Safe Mode (shows map/tables but skips heavy analyses)
-SAFE_MODE <- TRUE
-
 # Database connection function
 connect_to_db <- function() {
   db_path <- "medical_lock_hospitals.db"
@@ -423,7 +419,7 @@ ui <- dashboardPage(
         )
       ),
       
-      # Q1: Medicalization & Administrative Categories
+      # Hospital Notes Tab
       tabItem(tabName = "hospital_notes",
         fluidRow(
           box(
@@ -493,26 +489,6 @@ server <- function(input, output, session) {
   session$onSessionEnded(function() {
     message('SHINY_SESSION_END token=', session$token)
   })
-  # Respect SAFE_MODE toggle to avoid heavy analytics crashing the UI
-  safe_mode <- exists('SAFE_MODE') && isTRUE(SAFE_MODE)
-  if (safe_mode) {
-    message('SAFE_MODE: heavy analytics disabled; map and tables should load')
-    # Provide lightweight placeholders / short-circuit heavy reactives
-    correlation_data <- reactive({ data.frame() })
-    # Disabled heavy plotly outputs
-    output$correlation_dual_axis <- renderPlotly({ plot_ly() %>% layout(title = 'Disabled (safe mode)') })
-    output$correlation_scatter <- renderPlotly({ plot_ly() %>% layout(title = 'Disabled (safe mode)') })
-    output$correlation_metrics_table <- DT::renderDataTable({ DT::datatable(data.frame(Message = 'Disabled in safe mode')) })
-    output$med_surveillance_sankey <- renderSankeyNetwork({ NULL })
-    output$med_temporal_women_added <- renderPlotly({ plot_ly() %>% layout(title = 'Disabled (safe mode)') })
-    output$med_temporal_avg_registered <- renderPlotly({ plot_ly() %>% layout(title = 'Disabled (safe mode)') })
-    output$med_geo_women_added_by_region <- renderPlotly({ plot_ly() %>% layout(title = 'Disabled (safe mode)') })
-    output$med_geo_avg_registered_by_region <- renderPlotly({ plot_ly() %>% layout(title = 'Disabled (safe mode)') })
-    output$med_surveillance_sankey <- renderSankeyNetwork({ NULL })
-    output$med_acts_total <- renderPlotly({ plot_ly() %>% layout(title = 'Disabled (safe mode)') })
-    output$med_acts_timeline <- renderPlotly({ plot_ly() %>% layout(title = 'Disabled (safe mode)') })
-    output$med_acts_by_station <- DT::renderDataTable({ DT::datatable(data.frame(Message = 'Disabled in safe mode')) })
-  }
   
   # Database connection: open a single connection at session start and reuse it
   con_obj <- connect_to_db()
@@ -1215,6 +1191,138 @@ server <- function(input, output, session) {
   })
   
   # Overview Tab - Value Boxes
+  output$story_total_stats <- renderUI({
+    n_docs <- dbGetQuery(conn(), "SELECT COUNT(*) as count FROM documents")$count
+    n_stations <- dbGetQuery(conn(), "SELECT COUNT(*) as count FROM stations")$count
+    n_women <- dbGetQuery(conn(), "SELECT COUNT(*) as count FROM women_admission")$count
+    n_troops <- dbGetQuery(conn(), "SELECT COUNT(*) as count FROM troops")$count
+
+    # Calculate year ranges and missing years for all datasets
+    women <- women_df()
+    troops <- troops_df()
+    ops <- hospital_ops_enriched()
+
+    # Helper: get missing years in contiguous range
+    get_missing_years <- function(years) {
+      years <- sort(unique(na.omit(years)))
+      if (length(years) < 2) return(character(0))
+      yr_min <- min(years)
+      yr_max <- max(years)
+      expected <- seq(yr_min, yr_max)
+      missing <- setdiff(expected, years)
+      if (length(missing) > 0) return(as.character(missing))
+      character(0)
+    }
+
+    # Overall combined years across all datasets
+    all_years <- c(
+      if (nrow(women) > 0 && "year" %in% names(women)) women$year else numeric(0),
+      if (nrow(troops) > 0 && "year" %in% names(troops)) troops$year else numeric(0),
+      if (nrow(ops) > 0 && "year" %in% names(ops)) ops$year else numeric(0)
+    )
+    overall_missing <- get_missing_years(all_years)
+
+    # Per-region combined years across datasets
+    regions <- sort(unique(na.omit(c(
+      if (nrow(women) > 0 && "region" %in% names(women)) women$region else character(0),
+      if (nrow(troops) > 0 && "region" %in% names(troops)) troops$region else character(0),
+      if (nrow(ops) > 0 && "region" %in% names(ops)) ops$region else character(0)
+    ))))
+
+    region_missing_parts <- c()
+    if (length(regions) > 0) {
+      for (r in regions) {
+        years_r <- c(
+          if (nrow(women) > 0 && all(c("region","year") %in% names(women))) women$year[women$region == r] else numeric(0),
+          if (nrow(troops) > 0 && all(c("region","year") %in% names(troops))) troops$year[troops$region == r] else numeric(0),
+          if (nrow(ops) > 0 && all(c("region","year") %in% names(ops))) ops$year[ops$region == r] else numeric(0)
+        )
+        miss_r <- get_missing_years(years_r)
+        if (length(miss_r) > 0) {
+          region_missing_parts <- c(region_missing_parts, paste0(r, ": ", paste(miss_r, collapse = ", ")))
+        }
+      }
+    }
+
+    # Build concise missing years line(s)
+    missing_line <- ""
+    if (length(overall_missing) > 0 || length(region_missing_parts) > 0) {
+      overall_text <- if (length(overall_missing) > 0) paste0("We were not able to gather info for these years (overall): ", paste(overall_missing, collapse = ", ")) else NULL
+      region_text <- if (length(region_missing_parts) > 0) paste0("By region: ", paste(region_missing_parts, collapse = " | ")) else NULL
+      line_text <- paste(na.omit(c(overall_text, region_text)), collapse = ". ")
+      missing_line <- paste0("<div style='margin-top:10px; color:#7f8c8d; font-size:0.95em;'>", line_text, ".</div>")
+    }
+
+    HTML(paste0(
+      "<div>",
+      "<!-- Flexbox container for horizontal KPI boxes -->",
+      "<div style='display: flex; justify-content: space-between; align-items: center; gap: 20px; flex-wrap: wrap; margin-bottom: 20px;'>",
+      "  <div style='flex: 1; min-width: 200px; text-align: center; padding: 20px; background: rgba(52, 152, 219, 0.05); border-radius: 8px; border-top: 3px solid #3498db;'>",
+      "    <div style='font-size: 3em; font-weight: bold; color: #3498db;'>", n_stations, "</div>",
+      "    <div style='font-size: 1.1em; color: #7f8c8d; margin-top: 10px;'>Stations</div>",
+      "  </div>",
+      "  <div style='flex: 1; min-width: 200px; text-align: center; padding: 20px; background: rgba(231, 76, 60, 0.05); border-radius: 8px; border-top: 3px solid #e74c3c;'>",
+      "    <div style='font-size: 3em; font-weight: bold; color: #e74c3c;'>", n_women, "</div>",
+      "    <div style='font-size: 1.1em; color: #7f8c8d; margin-top: 10px;'>Women Records</div>",
+      "  </div>",
+      "  <div style='flex: 1; min-width: 200px; text-align: center; padding: 20px; background: rgba(243, 156, 18, 0.05); border-radius: 8px; border-top: 3px solid #f39c12;'>",
+      "    <div style='font-size: 3em; font-weight: bold; color: #f39c12;'>", n_troops, "</div>",
+      "    <div style='font-size: 1.1em; color: #7f8c8d; margin-top: 10px;'>Troop Records</div>",
+      "  </div>",
+      "  <div style='flex: 1; min-width: 200px; text-align: center; padding: 20px; background: rgba(155, 89, 182, 0.05); border-radius: 8px; border-top: 3px solid #9b59b6;'>",
+      "    <div style='font-size: 3em; font-weight: bold; color: #9b59b6;'>", n_docs, "</div>",
+      "    <div style='font-size: 1.1em; color: #7f8c8d; margin-top: 10px;'>Source Documents</div>",
+      "  </div>",
+      "</div>",
+      missing_line,
+      "</div>"
+    ))
+  })
+  
+  # Quality Summary Table
+  output$quality_summary <- DT::renderDataTable({
+    tables <- c("women_admission", "troops", "hospital_operations", "stations")
+    total_records <- sapply(tables, function(t) {
+      dbGetQuery(conn(), paste("SELECT COUNT(*) as count FROM", t))$count
+    })
+    complete_records <- sapply(tables, function(t) {
+      # Check what columns exist in the table first
+      cols <- dbGetQuery(conn(), paste0("PRAGMA table_info(", t, ")"))$name
+      
+      if (t %in% c("women_admission", "troops")) {
+        if ("doc_id" %in% cols && "source_name" %in% cols) {
+          dbGetQuery(conn(), paste("SELECT COUNT(*) as count FROM", t, "WHERE doc_id IS NOT NULL AND source_name IS NOT NULL"))$count
+        } else {
+          dbGetQuery(conn(), paste("SELECT COUNT(*) as count FROM", t))$count
+        }
+      } else if (t == "hospital_operations") {
+        # hospital_operations now only has station, year, act
+        # Consider complete if station and year are not null
+        if ("station" %in% cols && "year" %in% cols) {
+          dbGetQuery(conn(), paste("SELECT COUNT(*) as count FROM", t, "WHERE station IS NOT NULL AND year IS NOT NULL"))$count
+        } else {
+          dbGetQuery(conn(), paste("SELECT COUNT(*) as count FROM", t))$count
+        }
+      } else if (t == "stations") {
+        dbGetQuery(conn(), paste("SELECT COUNT(*) as count FROM", t, "WHERE name IS NOT NULL"))$count
+      } else {
+        if ("unique_id" %in% cols) {
+          dbGetQuery(conn(), paste("SELECT COUNT(*) as count FROM", t, "WHERE unique_id IS NOT NULL"))$count
+        } else if ("hid" %in% cols) {
+          dbGetQuery(conn(), paste("SELECT COUNT(*) as count FROM", t, "WHERE hid IS NOT NULL"))$count
+        } else {
+          # Fallback: consider all records complete
+          dbGetQuery(conn(), paste("SELECT COUNT(*) as count FROM", t))$count
+        }
+      }
+    })
+    quality_data <- data.frame(Table = tables, Total_Records = total_records, Complete_Records = complete_records)
+    quality_data$Completeness <- round(quality_data$Complete_Records / quality_data$Total_Records * 100, 1)
+    quality_data
+  }, options = list(pageLength = 6, dom = 't'))
+  
+  # (Removed) Missing Data Plot - intentionally removed as per request
+  
   # Data Tables Tab - reactive trigger for refreshing table
   table_refresh <- reactiveVal(0)
   
@@ -1568,139 +1676,6 @@ server <- function(input, output, session) {
     }
   })
 
-  # Network: information recorded about Men (Troops)
-  output$med_men_network <- renderForceNetwork({
-    # Get data and filter by timeline
-    year_range <- input$pipeline_years
-    if (is.null(year_range)) year_range <- c(1860, 1890)
-    df <- tryCatch(troops_df(), error = function(e) data.frame())
-    if (!is.data.frame(df) || nrow(df) == 0) {
-      return(forceNetwork(Links = data.frame(source=integer(), target=integer(), value=numeric()),
-                          Nodes = data.frame(name=character(), group=character()),
-                          Source = "source", Target = "target", NodeID = "name", Group = "group"))
-    }
-    df <- df %>% dplyr::filter(year >= year_range[1], year <= year_range[2])
-    validate(need(nrow(df) > 0, "No troop records in selected years"))
-
-    # Helper to compute non-empty coverage
-    non_empty <- function(x) {
-      if (is.numeric(x)) { !is.na(x) } else { !is.na(x) & nzchar(as.character(x)) }
-    }
-
-    # Variable categories mapping
-    var_map <- list(
-      list(cat = "Strength", cols = c("avg_strength")),
-      list(cat = "Admissions", cols = c("total_admissions")),
-      list(cat = "Disease", cols = c("primary_syphilis","secondary_syphilis","gonorrhoea","orchitis_gonorrhoea","phimosis","warts")),
-      list(cat = "Contraction", cols = c("contracted_at_station","contracted_elsewhere")),
-      list(cat = "Ratios", cols = c("ratio_per_1000")),
-      list(cat = "Regiments", cols = c("Regiments")),
-      list(cat = "Occupation", cols = c("period_of_occupation"))
-    )
-
-    pretty_label <- function(x) {
-      x <- gsub("_", " ", x)
-      x <- gsub("ratio per 1000", "Ratio per 1000", x, ignore.case = TRUE)
-      tools::toTitleCase(x)
-    }
-
-    # Build nodes and links
-  nodes <- data.frame(name = "Men (Troops)", group = "Entity", stringsAsFactors = FALSE)
-  links <- data.frame(source = integer(0), target = integer(0), value = numeric(0), stringsAsFactors = FALSE)
-
-    idx <- 1
-    for (grp in var_map) {
-      for (col in grp$cols) {
-        if (col %in% names(df)) {
-          cov <- round(100 * mean(non_empty(df[[col]]), na.rm = TRUE), 1)
-          label <- pretty_label(col)
-          nodes <- rbind(nodes, data.frame(name = label, group = grp$cat, stringsAsFactors = FALSE))
-          links <- rbind(links, data.frame(source = 0, target = idx, value = ifelse(is.finite(cov), max(cov, 0.1), 0.1), stringsAsFactors = FALSE))
-          idx <- idx + 1
-        }
-      }
-    }
-
-    colourScale <- JS(
-      "d3.scaleOrdinal()\n        .domain(['Entity','Strength','Admissions','Disease','Contraction','Ratios','Regiments','Occupation'])\n        .range(['#34495e','#27ae60','#2980b9','#e74c3c','#f39c12','#8e44ad','#16a085','#7f8c8d'])"
-    )
-
-    forceNetwork(
-      Links = links, Nodes = nodes,
-      Source = "source", Target = "target",
-      NodeID = "name", Group = "group",
-      Value = "value", opacity = 0.95, zoom = TRUE,
-      linkDistance = 120, charge = -380,
-      legend = FALSE, fontSize = 12,
-      colourScale = colourScale,
-      opacityNoHover = 0.2,
-      linkColour = "#95a5a6"
-    )
-  })
-
-  # Network: information recorded about Women
-  output$med_women_network <- renderForceNetwork({
-    year_range <- input$pipeline_years
-    if (is.null(year_range)) year_range <- c(1860, 1890)
-    df <- tryCatch(women_df(), error = function(e) data.frame())
-    if (!is.data.frame(df) || nrow(df) == 0) {
-      return(forceNetwork(Links = data.frame(source=integer(), target=integer(), value=numeric()),
-                          Nodes = data.frame(name=character(), group=character()),
-                          Source = "source", Target = "target", NodeID = "name", Group = "group"))
-    }
-    df <- df %>% dplyr::filter(year >= year_range[1], year <= year_range[2])
-    validate(need(nrow(df) > 0, "No women records in selected years"))
-
-    non_empty <- function(x) {
-      if (is.numeric(x)) { !is.na(x) } else { !is.na(x) & nzchar(as.character(x)) }
-    }
-
-    var_map <- list(
-      list(cat = "Register", cols = c("women_start_register","women_added","women_removed","women_end_register","avg_registered")),
-      list(cat = "Compliance/Discipline", cols = c("non_attendance_cases","fined_count","imprisonment_count")),
-      list(cat = "Disease", cols = c("disease_primary_syphilis","disease_secondary_syphilis","disease_gonorrhoea","disease_leucorrhoea")),
-      list(cat = "Outcomes", cols = c("discharges","deaths","Total")),
-      list(cat = "Notes", cols = c("side_notes"))
-    )
-
-    pretty_label <- function(x) tools::toTitleCase(gsub("_", " ", x))
-
-  nodes <- data.frame(name = "Women", group = "Entity", stringsAsFactors = FALSE)
-  links <- data.frame(source = integer(0), target = integer(0), value = numeric(0), stringsAsFactors = FALSE)
-    idx <- 1
-    for (grp in var_map) {
-      for (col in grp$cols) {
-        if (col %in% names(df)) {
-          cov <- round(100 * mean(non_empty(df[[col]]), na.rm = TRUE), 1)
-          label <- pretty_label(col)
-          nodes <- rbind(nodes, data.frame(name = label, group = grp$cat, stringsAsFactors = FALSE))
-          links <- rbind(links, data.frame(source = 0, target = idx, value = ifelse(is.finite(cov), max(cov, 0.1), 0.1), stringsAsFactors = FALSE))
-          idx <- idx + 1
-        }
-      }
-    }
-
-    colourScale <- JS(
-      "d3.scaleOrdinal()\n        .domain(['Entity','Register','Compliance/Discipline','Disease','Outcomes','Notes'])\n        .range(['#34495e','#27ae60','#f39c12','#e74c3c','#2980b9','#8e44ad'])"
-    )
-
-    forceNetwork(
-      Links = links, Nodes = nodes,
-      Source = "source", Target = "target",
-      NodeID = "name", Group = "group",
-      Value = "value", opacity = 0.95, zoom = TRUE,
-      linkDistance = 120, charge = -380,
-      legend = FALSE, fontSize = 12,
-      colourScale = colourScale,
-      opacityNoHover = 0.2,
-      linkColour = "#95a5a6"
-    )
-  })
-
-  # =====================
-  # Medicalization visuals (new)
-  # =====================
-  women_df <- reactive({
     dbGetQuery(conn(), "SELECT * FROM women_admission")
   })
   ops_df <- reactive({

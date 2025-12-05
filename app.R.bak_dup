@@ -1215,6 +1215,138 @@ server <- function(input, output, session) {
   })
   
   # Overview Tab - Value Boxes
+  output$story_total_stats <- renderUI({
+    n_docs <- dbGetQuery(conn(), "SELECT COUNT(*) as count FROM documents")$count
+    n_stations <- dbGetQuery(conn(), "SELECT COUNT(*) as count FROM stations")$count
+    n_women <- dbGetQuery(conn(), "SELECT COUNT(*) as count FROM women_admission")$count
+    n_troops <- dbGetQuery(conn(), "SELECT COUNT(*) as count FROM troops")$count
+
+    # Calculate year ranges and missing years for all datasets
+    women <- women_df()
+    troops <- troops_df()
+    ops <- hospital_ops_enriched()
+
+    # Helper: get missing years in contiguous range
+    get_missing_years <- function(years) {
+      years <- sort(unique(na.omit(years)))
+      if (length(years) < 2) return(character(0))
+      yr_min <- min(years)
+      yr_max <- max(years)
+      expected <- seq(yr_min, yr_max)
+      missing <- setdiff(expected, years)
+      if (length(missing) > 0) return(as.character(missing))
+      character(0)
+    }
+
+    # Overall combined years across all datasets
+    all_years <- c(
+      if (nrow(women) > 0 && "year" %in% names(women)) women$year else numeric(0),
+      if (nrow(troops) > 0 && "year" %in% names(troops)) troops$year else numeric(0),
+      if (nrow(ops) > 0 && "year" %in% names(ops)) ops$year else numeric(0)
+    )
+    overall_missing <- get_missing_years(all_years)
+
+    # Per-region combined years across datasets
+    regions <- sort(unique(na.omit(c(
+      if (nrow(women) > 0 && "region" %in% names(women)) women$region else character(0),
+      if (nrow(troops) > 0 && "region" %in% names(troops)) troops$region else character(0),
+      if (nrow(ops) > 0 && "region" %in% names(ops)) ops$region else character(0)
+    ))))
+
+    region_missing_parts <- c()
+    if (length(regions) > 0) {
+      for (r in regions) {
+        years_r <- c(
+          if (nrow(women) > 0 && all(c("region","year") %in% names(women))) women$year[women$region == r] else numeric(0),
+          if (nrow(troops) > 0 && all(c("region","year") %in% names(troops))) troops$year[troops$region == r] else numeric(0),
+          if (nrow(ops) > 0 && all(c("region","year") %in% names(ops))) ops$year[ops$region == r] else numeric(0)
+        )
+        miss_r <- get_missing_years(years_r)
+        if (length(miss_r) > 0) {
+          region_missing_parts <- c(region_missing_parts, paste0(r, ": ", paste(miss_r, collapse = ", ")))
+        }
+      }
+    }
+
+    # Build concise missing years line(s)
+    missing_line <- ""
+    if (length(overall_missing) > 0 || length(region_missing_parts) > 0) {
+      overall_text <- if (length(overall_missing) > 0) paste0("We were not able to gather info for these years (overall): ", paste(overall_missing, collapse = ", ")) else NULL
+      region_text <- if (length(region_missing_parts) > 0) paste0("By region: ", paste(region_missing_parts, collapse = " | ")) else NULL
+      line_text <- paste(na.omit(c(overall_text, region_text)), collapse = ". ")
+      missing_line <- paste0("<div style='margin-top:10px; color:#7f8c8d; font-size:0.95em;'>", line_text, ".</div>")
+    }
+
+    HTML(paste0(
+      "<div>",
+      "<!-- Flexbox container for horizontal KPI boxes -->",
+      "<div style='display: flex; justify-content: space-between; align-items: center; gap: 20px; flex-wrap: wrap; margin-bottom: 20px;'>",
+      "  <div style='flex: 1; min-width: 200px; text-align: center; padding: 20px; background: rgba(52, 152, 219, 0.05); border-radius: 8px; border-top: 3px solid #3498db;'>",
+      "    <div style='font-size: 3em; font-weight: bold; color: #3498db;'>", n_stations, "</div>",
+      "    <div style='font-size: 1.1em; color: #7f8c8d; margin-top: 10px;'>Stations</div>",
+      "  </div>",
+      "  <div style='flex: 1; min-width: 200px; text-align: center; padding: 20px; background: rgba(231, 76, 60, 0.05); border-radius: 8px; border-top: 3px solid #e74c3c;'>",
+      "    <div style='font-size: 3em; font-weight: bold; color: #e74c3c;'>", n_women, "</div>",
+      "    <div style='font-size: 1.1em; color: #7f8c8d; margin-top: 10px;'>Women Records</div>",
+      "  </div>",
+      "  <div style='flex: 1; min-width: 200px; text-align: center; padding: 20px; background: rgba(243, 156, 18, 0.05); border-radius: 8px; border-top: 3px solid #f39c12;'>",
+      "    <div style='font-size: 3em; font-weight: bold; color: #f39c12;'>", n_troops, "</div>",
+      "    <div style='font-size: 1.1em; color: #7f8c8d; margin-top: 10px;'>Troop Records</div>",
+      "  </div>",
+      "  <div style='flex: 1; min-width: 200px; text-align: center; padding: 20px; background: rgba(155, 89, 182, 0.05); border-radius: 8px; border-top: 3px solid #9b59b6;'>",
+      "    <div style='font-size: 3em; font-weight: bold; color: #9b59b6;'>", n_docs, "</div>",
+      "    <div style='font-size: 1.1em; color: #7f8c8d; margin-top: 10px;'>Source Documents</div>",
+      "  </div>",
+      "</div>",
+      missing_line,
+      "</div>"
+    ))
+  })
+  
+  # Quality Summary Table
+  output$quality_summary <- DT::renderDataTable({
+    tables <- c("women_admission", "troops", "hospital_operations", "stations")
+    total_records <- sapply(tables, function(t) {
+      dbGetQuery(conn(), paste("SELECT COUNT(*) as count FROM", t))$count
+    })
+    complete_records <- sapply(tables, function(t) {
+      # Check what columns exist in the table first
+      cols <- dbGetQuery(conn(), paste0("PRAGMA table_info(", t, ")"))$name
+      
+      if (t %in% c("women_admission", "troops")) {
+        if ("doc_id" %in% cols && "source_name" %in% cols) {
+          dbGetQuery(conn(), paste("SELECT COUNT(*) as count FROM", t, "WHERE doc_id IS NOT NULL AND source_name IS NOT NULL"))$count
+        } else {
+          dbGetQuery(conn(), paste("SELECT COUNT(*) as count FROM", t))$count
+        }
+      } else if (t == "hospital_operations") {
+        # hospital_operations now only has station, year, act
+        # Consider complete if station and year are not null
+        if ("station" %in% cols && "year" %in% cols) {
+          dbGetQuery(conn(), paste("SELECT COUNT(*) as count FROM", t, "WHERE station IS NOT NULL AND year IS NOT NULL"))$count
+        } else {
+          dbGetQuery(conn(), paste("SELECT COUNT(*) as count FROM", t))$count
+        }
+      } else if (t == "stations") {
+        dbGetQuery(conn(), paste("SELECT COUNT(*) as count FROM", t, "WHERE name IS NOT NULL"))$count
+      } else {
+        if ("unique_id" %in% cols) {
+          dbGetQuery(conn(), paste("SELECT COUNT(*) as count FROM", t, "WHERE unique_id IS NOT NULL"))$count
+        } else if ("hid" %in% cols) {
+          dbGetQuery(conn(), paste("SELECT COUNT(*) as count FROM", t, "WHERE hid IS NOT NULL"))$count
+        } else {
+          # Fallback: consider all records complete
+          dbGetQuery(conn(), paste("SELECT COUNT(*) as count FROM", t))$count
+        }
+      }
+    })
+    quality_data <- data.frame(Table = tables, Total_Records = total_records, Complete_Records = complete_records)
+    quality_data$Completeness <- round(quality_data$Complete_Records / quality_data$Total_Records * 100, 1)
+    quality_data
+  }, options = list(pageLength = 6, dom = 't'))
+  
+  # (Removed) Missing Data Plot - intentionally removed as per request
+  
   # Data Tables Tab - reactive trigger for refreshing table
   table_refresh <- reactiveVal(0)
   

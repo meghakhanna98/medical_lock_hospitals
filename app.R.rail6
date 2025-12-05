@@ -65,10 +65,6 @@ for (f in src_files) {
 }
 shiny::addResourcePath("images", img_safe_dir)
 
-# Toggle to disable heavy analytics and long-running observers while debugging UI
-# Set to TRUE to enable Safe Mode (shows map/tables but skips heavy analyses)
-SAFE_MODE <- TRUE
-
 # Database connection function
 connect_to_db <- function() {
   db_path <- "medical_lock_hospitals.db"
@@ -423,7 +419,7 @@ ui <- dashboardPage(
         )
       ),
       
-      # Q1: Medicalization & Administrative Categories
+      # Hospital Notes Tab
       tabItem(tabName = "hospital_notes",
         fluidRow(
           box(
@@ -493,26 +489,6 @@ server <- function(input, output, session) {
   session$onSessionEnded(function() {
     message('SHINY_SESSION_END token=', session$token)
   })
-  # Respect SAFE_MODE toggle to avoid heavy analytics crashing the UI
-  safe_mode <- exists('SAFE_MODE') && isTRUE(SAFE_MODE)
-  if (safe_mode) {
-    message('SAFE_MODE: heavy analytics disabled; map and tables should load')
-    # Provide lightweight placeholders / short-circuit heavy reactives
-    correlation_data <- reactive({ data.frame() })
-    # Disabled heavy plotly outputs
-    output$correlation_dual_axis <- renderPlotly({ plot_ly() %>% layout(title = 'Disabled (safe mode)') })
-    output$correlation_scatter <- renderPlotly({ plot_ly() %>% layout(title = 'Disabled (safe mode)') })
-    output$correlation_metrics_table <- DT::renderDataTable({ DT::datatable(data.frame(Message = 'Disabled in safe mode')) })
-    output$med_surveillance_sankey <- renderSankeyNetwork({ NULL })
-    output$med_temporal_women_added <- renderPlotly({ plot_ly() %>% layout(title = 'Disabled (safe mode)') })
-    output$med_temporal_avg_registered <- renderPlotly({ plot_ly() %>% layout(title = 'Disabled (safe mode)') })
-    output$med_geo_women_added_by_region <- renderPlotly({ plot_ly() %>% layout(title = 'Disabled (safe mode)') })
-    output$med_geo_avg_registered_by_region <- renderPlotly({ plot_ly() %>% layout(title = 'Disabled (safe mode)') })
-    output$med_surveillance_sankey <- renderSankeyNetwork({ NULL })
-    output$med_acts_total <- renderPlotly({ plot_ly() %>% layout(title = 'Disabled (safe mode)') })
-    output$med_acts_timeline <- renderPlotly({ plot_ly() %>% layout(title = 'Disabled (safe mode)') })
-    output$med_acts_by_station <- DT::renderDataTable({ DT::datatable(data.frame(Message = 'Disabled in safe mode')) })
-  }
   
   # Database connection: open a single connection at session start and reuse it
   con_obj <- connect_to_db()
@@ -520,106 +496,6 @@ server <- function(input, output, session) {
     con_obj
   })
   
-  # Load railway shapefiles (MOVED INSIDE SERVER FUNCTION)
-  railway_lines <- tryCatch({
-    message("Loading railway_lines.shp...")
-    lines <- st_read("data_raw/railway_lines.shp", quiet = TRUE)
-    message(sprintf("SUCCESS: railway_lines loaded with %d features", nrow(lines)))
-    lines
-  }, error = function(e) {
-    message("ERROR loading railway lines shapefile: ", e$message)
-    NULL
-  })
-  
-  railway_stations <- tryCatch({
-    message("Loading railway_stations_extended.shp...")
-    stations <- st_read("data_raw/railway_stations_extended.shp", quiet = TRUE)
-    message(sprintf("SUCCESS: railway_stations loaded with %d features", nrow(stations)))
-    stations
-  }, error = function(e) {
-    message("ERROR loading railway stations shapefile: ", e$message)
-    NULL
-  })
-
-  # Enrich railway stations with attributes from nearest railway line
-  if (!is.null(railway_lines) && !is.null(railway_stations)) {
-    try({
-      message("Enriching railway stations with nearest line attributes...")
-      rl <- st_transform(railway_lines, 4326)
-      rs <- st_transform(railway_stations, 4326)
-      idx <- sf::st_nearest_feature(rs, rl)
-      rs$nearest_section <- rl$Section[idx]
-      rs$nearest_railway <- rl$Railway[idx]
-      rs$nearest_year <- rl$Year[idx]
-      railway_stations <- rs
-      message("Railway stations enriched successfully")
-    }, silent = TRUE)
-  }
-
-  # Load override CSV if present
-  override_path <- "data_raw/railway_lines_override.csv"
-  if (file.exists(override_path)) {
-    try({
-      message("Loading railway lines override from ", override_path)
-      ov <- utils::read.csv(override_path, stringsAsFactors = FALSE)
-      new_lines <- list()
-      if (nrow(ov) > 0 && "station_seq" %in% names(ov)) {
-        for (i in seq_len(nrow(ov))) {
-          row <- ov[i, , drop = FALSE]
-          stations <- strsplit(as.character(row$station_seq), ",")[[1]]
-          stations <- trimws(stations)
-          coords <- lapply(stations, function(s) {
-            m <- which(tolower(railway_stations$orig_name) == tolower(s) | tolower(railway_stations$modern_nam) == tolower(s))
-            if (length(m) == 0) return(NULL)
-            c(railway_stations$lon[m[1]], railway_stations$lat[m[1]])
-          })
-          coords <- Filter(Negate(is.null), coords)
-          if (length(coords) >= 2) {
-            mat <- do.call(rbind, coords)
-            ls <- sf::st_linestring(mat)
-            sfc <- sf::st_sfc(ls, crs = 4326)
-            sfobj <- sf::st_sf(data.frame(Section = row$Section, Railway = row$Railway, Year = row$Year, stringsAsFactors = FALSE), geometry = sfc)
-            new_lines[[length(new_lines) + 1]] <- sfobj
-          }
-        }
-      } else if (nrow(ov) > 0 && all(c("station","seq","Section","Railway") %in% names(ov))) {
-        grp_keys <- unique(paste(ov$Section, ov$Railway, ov$Year, sep = "__"))
-        for (g in grp_keys) {
-          parts <- strsplit(g, "__", fixed = TRUE)[[1]]
-          sec <- parts[1]; rail <- parts[2]; yr <- parts[3]
-          sub <- ov[ov$Section == sec & ov$Railway == rail & as.character(ov$Year) == as.character(yr), ]
-          sub <- sub[order(as.numeric(sub$seq)), ]
-          stations <- trimws(as.character(sub$station))
-          coords <- lapply(stations, function(s) {
-            m <- which(tolower(railway_stations$orig_name) == tolower(s) | tolower(railway_stations$modern_nam) == tolower(s))
-            if (length(m) == 0) return(NULL)
-            c(railway_stations$lon[m[1]], railway_stations$lat[m[1]])
-          })
-          coords <- Filter(Negate(is.null), coords)
-          if (length(coords) >= 2) {
-            mat <- do.call(rbind, coords)
-            ls <- sf::st_linestring(mat)
-            sfc <- sf::st_sfc(ls, crs = 4326)
-            sfobj <- sf::st_sf(data.frame(Section = sec, Railway = rail, Year = yr, stringsAsFactors = FALSE), geometry = sfc)
-            new_lines[[length(new_lines) + 1]] <- sfobj
-          }
-        }
-      }
-
-      if (length(new_lines) > 0) {
-        new_sf <- do.call(rbind, new_lines)
-        if (is.null(railway_lines)) {
-          railway_lines <- new_sf
-        } else {
-          railway_lines <- rbind(railway_lines, new_sf)
-        }
-        message("Appended ", length(new_lines), " override railway lines from CSV")
-      }
-    }, silent = TRUE)
-  }
-
-  # On app start, set the year slider to 1873 (earliest year with data)
-  try({
     updateSliderInput(session, "year_slider", value = 1873)
   }, silent = TRUE)
   
@@ -709,106 +585,6 @@ server <- function(input, output, session) {
   })
   
   # Helper: draw railway overlays (lines + stations) for a given year
-    draw_rail_overlays <- function(selected_year) {
-      # defensive
-      if (is.null(selected_year)) return(invisible(NULL))
-      if (is.null(railway_lines) && is.null(railway_stations)) return(invisible(NULL))
-
-      message(sprintf("draw_rail_overlays() called for year: %s", as.character(selected_year)))
-      
-      # Debug: check railway_lines state
-      if (is.null(railway_lines)) {
-        message("railway_lines is NULL - no lines to draw")
-        railways_filtered <- NULL
-      } else {
-        message(sprintf("railway_lines has %d rows", nrow(railway_lines)))
-        # prepare filtered lines
-        rail_year <- suppressWarnings(as.numeric(as.character(railway_lines$Year)))
-        message(sprintf("rail_year values: %s", paste(head(rail_year, 10), collapse=", ")))
-        railways_filtered <- tryCatch({
-          filtered <- railway_lines[ ( !is.na(rail_year) & rail_year <= selected_year ) | is.na(rail_year), ]
-          message(sprintf("After filtering by year <= %s: %d rows", selected_year, nrow(filtered)))
-          filtered
-        }, error = function(e) {
-          message(sprintf("Error filtering railway_lines: %s", e$message))
-          railway_lines
-        })
-      }
-
-      # prepare filtered stations based on nearest_year (if available)
-      railway_stations_filtered <- railway_stations
-      if (!is.null(railway_stations) && nrow(railway_stations) > 0) {
-        ny <- tryCatch({ suppressWarnings(as.numeric(as.character(railway_stations$nearest_year))) }, error = function(e) rep(NA, nrow(railway_stations)))
-        railway_stations_filtered <- tryCatch({
-          railway_stations[ ( !is.na(ny) & ny <= selected_year ) | is.na(ny), ]
-        }, error = function(e) railway_stations)
-      }
-
-      proxy <- leafletProxy("map")
-      proxy %>% clearGroup("railways") %>% clearGroup("railway_stations")
-
-      if (!is.null(railways_filtered) && nrow(railways_filtered) > 0) {
-        message(sprintf("Drawing railway lines - filtered rows: %d", nrow(railways_filtered)))
-        
-        # Draw lines manually using lng/lat pairs from sf geometry
-        for (i in seq_len(nrow(railways_filtered))) {
-          tryCatch({
-            line_coords <- st_coordinates(railways_filtered[i, ])
-            if (nrow(line_coords) >= 2) {
-              proxy <- proxy %>% addPolylines(
-                lng = line_coords[, "X"],
-                lat = line_coords[, "Y"],
-                color = "#d62728",
-                weight = 3,
-                opacity = 0.8,
-                group = "railways",
-                popup = paste0(
-                  "<b>Railway Section</b><br>",
-                  "Section: ", railways_filtered$Section[i], "<br>",
-                  "Line: ", railways_filtered$Railway[i], "<br>",
-                  "Year Opened: ", railways_filtered$Year[i]
-                ),
-                label = paste0(railways_filtered$Section[i], " - ", railways_filtered$Railway[i])
-              )
-            }
-          }, error = function(e) {
-            message(sprintf("Error drawing line %d: %s", i, e$message))
-          })
-        }
-        message(sprintf("Successfully processed %d railway lines", nrow(railways_filtered)))
-      }
-
-      if (!is.null(railway_stations_filtered) && nrow(railway_stations_filtered) > 0) {
-        message(sprintf("railway_stations_filtered rows: %d", nrow(railway_stations_filtered)))
-        proxy %>% addCircleMarkers(
-          data = railway_stations_filtered,
-          radius = 4,
-          color = "#f39c12",
-          fillColor = "#f1c40f",
-          fillOpacity = 0.8,
-          weight = 1.5,
-          group = "railway_stations",
-          popup = ~paste0(
-            "<b>Railway Station</b><br>",
-            "Historic: ", orig_name, "<br>",
-            "Modern: ", modern_nam,
-            if (!is.null(nearest_section)) paste0("<br><b>Section:</b> ", nearest_section) else "",
-            if (!is.null(nearest_railway)) paste0("<br><b>Line:</b> ", nearest_railway) else "",
-            if (!is.null(nearest_year)) paste0("<br><b>Year Opened:</b> ", nearest_year) else ""
-          ),
-          label = ~orig_name
-        )
-      }
-      invisible(NULL)
-    }
-  
-  # Load British India boundary (modern India, Pakistan, Bangladesh, Myanmar borders as proxy)
-  india_boundary <- tryCatch({
-    # Get country boundaries for the Indian subcontinent
-    india <- ne_countries(scale = "medium", country = c("India", "Pakistan", "Bangladesh", "Myanmar"), returnclass = "sf")
-    # Ensure CRS is EPSG:4326 (WGS84)
-    st_transform(india, crs = 4326)
-  }, error = function(e) {
     message("Could not load boundary data: ", e$message)
     NULL
   })
@@ -938,35 +714,6 @@ server <- function(input, output, session) {
     }, once = TRUE)
   
   # Update railway overlays when checkbox changes or year changes
-  observeEvent(list(input$show_railways, input$year_slider), {
-    # Use observeEvent so we trigger when show_railways or year_slider change
-    req(input$year_slider)
-    
-    show_rail <- isTRUE(input$show_railways)
-    message(sprintf("Railway overlay observer triggered: show_railways=%s year=%s", 
-                    as.character(show_rail), as.character(input$year_slider)))
-    
-    if (show_rail && !is.null(railway_lines) && !is.null(railway_stations)) {
-      # Delegate drawing to centralized helper (handles filtering by year and clearing groups)
-      message("Attempting to draw railway overlays...")
-      tryCatch({
-        draw_rail_overlays(input$year_slider)
-        message("Railway overlays drawn successfully")
-      }, error = function(e) {
-        message(sprintf("ERROR drawing railway overlays: %s", e$message))
-      })
-    } else {
-      message("Clearing railway layers from map")
-      leafletProxy("map") %>%
-        clearGroup("railways") %>%
-        clearGroup("railway_stations")
-    }
-  }, ignoreNULL = FALSE, ignoreInit = FALSE)
-  
-  # Update map markers when data or filters change
-  observe({
-    req(input$year_slider)
-    
     # Always show hospital markers (no toggle)
     
     data <- map_data()
@@ -1122,70 +869,6 @@ server <- function(input, output, session) {
   })
   
   # Railway lines table - shows lines operational in selected year
-  output$railway_lines_table <- DT::renderDataTable({
-    req(input$year_slider)
-    
-    if (is.null(railway_lines)) {
-      return(DT::datatable(data.frame(Message = "Railway data not available")))
-    }
-    
-    selected_year <- input$year_slider
-    railways_filtered <- railway_lines[railway_lines$Year <= selected_year, ]
-    
-    if (nrow(railways_filtered) == 0) {
-      return(DT::datatable(data.frame(Message = paste("No railways operational by", selected_year))))
-    }
-    
-    # Convert to regular dataframe and select columns
-    display_data <- as.data.frame(railways_filtered) %>%
-      dplyr::select(
-        Section = Section,
-        Railway = Railway,
-        `Year Opened` = Year,
-        `Distance (miles)` = Miles,
-        From = start_name,
-        To = end_name
-      ) %>%
-      dplyr::arrange(`Year Opened`)
-    
-    DT::datatable(
-      display_data,
-      options = list(
-        pageLength = 10,
-        scrollX = FALSE,
-        dom = 'ftip'
-      ),
-      rownames = FALSE
-    )
-  })
-  
-  # Railway stations table
-  output$railway_stations_table <- DT::renderDataTable({
-    if (is.null(railway_stations)) {
-      return(DT::datatable(data.frame(Message = "Railway station data not available")))
-    }
-    
-    # Convert to regular dataframe
-    display_data <- as.data.frame(railway_stations) %>%
-      dplyr::select(
-        `Historic Name` = orig_name,
-        `Modern Name` = modern_nam,
-        Latitude = lat,
-        Longitude = lon
-      ) %>%
-      dplyr::arrange(`Historic Name`)
-    
-    DT::datatable(
-      display_data,
-      options = list(
-        pageLength = 10,
-        scrollX = FALSE,
-        dom = 'ftip'
-      ),
-      rownames = FALSE
-    )
-  })
-  
   # ===== END INTERACTIVE MAP FUNCTIONALITY =====
   
   # Image Gallery Navigation
@@ -1215,6 +898,138 @@ server <- function(input, output, session) {
   })
   
   # Overview Tab - Value Boxes
+  output$story_total_stats <- renderUI({
+    n_docs <- dbGetQuery(conn(), "SELECT COUNT(*) as count FROM documents")$count
+    n_stations <- dbGetQuery(conn(), "SELECT COUNT(*) as count FROM stations")$count
+    n_women <- dbGetQuery(conn(), "SELECT COUNT(*) as count FROM women_admission")$count
+    n_troops <- dbGetQuery(conn(), "SELECT COUNT(*) as count FROM troops")$count
+
+    # Calculate year ranges and missing years for all datasets
+    women <- women_df()
+    troops <- troops_df()
+    ops <- tryCatch(ops_df(), error = function(e) data.frame())
+
+    # Helper: get missing years in contiguous range
+    get_missing_years <- function(years) {
+      years <- sort(unique(na.omit(years)))
+      if (length(years) < 2) return(character(0))
+      yr_min <- min(years)
+      yr_max <- max(years)
+      expected <- seq(yr_min, yr_max)
+      missing <- setdiff(expected, years)
+      if (length(missing) > 0) return(as.character(missing))
+      character(0)
+    }
+
+    # Overall combined years across all datasets
+    all_years <- c(
+      if (nrow(women) > 0 && "year" %in% names(women)) women$year else numeric(0),
+      if (nrow(troops) > 0 && "year" %in% names(troops)) troops$year else numeric(0),
+      if (nrow(ops) > 0 && "year" %in% names(ops)) ops$year else numeric(0)
+    )
+    overall_missing <- get_missing_years(all_years)
+
+    # Per-region combined years across datasets
+    regions <- sort(unique(na.omit(c(
+      if (nrow(women) > 0 && "region" %in% names(women)) women$region else character(0),
+      if (nrow(troops) > 0 && "region" %in% names(troops)) troops$region else character(0),
+      if (nrow(ops) > 0 && "region" %in% names(ops)) ops$region else character(0)
+    ))))
+
+    region_missing_parts <- c()
+    if (length(regions) > 0) {
+      for (r in regions) {
+        years_r <- c(
+          if (nrow(women) > 0 && all(c("region","year") %in% names(women))) women$year[women$region == r] else numeric(0),
+          if (nrow(troops) > 0 && all(c("region","year") %in% names(troops))) troops$year[troops$region == r] else numeric(0),
+          if (nrow(ops) > 0 && all(c("region","year") %in% names(ops))) ops$year[ops$region == r] else numeric(0)
+        )
+        miss_r <- get_missing_years(years_r)
+        if (length(miss_r) > 0) {
+          region_missing_parts <- c(region_missing_parts, paste0(r, ": ", paste(miss_r, collapse = ", ")))
+        }
+      }
+    }
+
+    # Build concise missing years line(s)
+    missing_line <- ""
+    if (length(overall_missing) > 0 || length(region_missing_parts) > 0) {
+      overall_text <- if (length(overall_missing) > 0) paste0("We were not able to gather info for these years (overall): ", paste(overall_missing, collapse = ", ")) else NULL
+      region_text <- if (length(region_missing_parts) > 0) paste0("By region: ", paste(region_missing_parts, collapse = " | ")) else NULL
+      line_text <- paste(na.omit(c(overall_text, region_text)), collapse = ". ")
+      missing_line <- paste0("<div style='margin-top:10px; color:#7f8c8d; font-size:0.95em;'>", line_text, ".</div>")
+    }
+
+    HTML(paste0(
+      "<div>",
+      "<!-- Flexbox container for horizontal KPI boxes -->",
+      "<div style='display: flex; justify-content: space-between; align-items: center; gap: 20px; flex-wrap: wrap; margin-bottom: 20px;'>",
+      "  <div style='flex: 1; min-width: 200px; text-align: center; padding: 20px; background: rgba(52, 152, 219, 0.05); border-radius: 8px; border-top: 3px solid #3498db;'>",
+      "    <div style='font-size: 3em; font-weight: bold; color: #3498db;'>", n_stations, "</div>",
+      "    <div style='font-size: 1.1em; color: #7f8c8d; margin-top: 10px;'>Stations</div>",
+      "  </div>",
+      "  <div style='flex: 1; min-width: 200px; text-align: center; padding: 20px; background: rgba(231, 76, 60, 0.05); border-radius: 8px; border-top: 3px solid #e74c3c;'>",
+      "    <div style='font-size: 3em; font-weight: bold; color: #e74c3c;'>", n_women, "</div>",
+      "    <div style='font-size: 1.1em; color: #7f8c8d; margin-top: 10px;'>Women Records</div>",
+      "  </div>",
+      "  <div style='flex: 1; min-width: 200px; text-align: center; padding: 20px; background: rgba(243, 156, 18, 0.05); border-radius: 8px; border-top: 3px solid #f39c12;'>",
+      "    <div style='font-size: 3em; font-weight: bold; color: #f39c12;'>", n_troops, "</div>",
+      "    <div style='font-size: 1.1em; color: #7f8c8d; margin-top: 10px;'>Troop Records</div>",
+      "  </div>",
+      "  <div style='flex: 1; min-width: 200px; text-align: center; padding: 20px; background: rgba(155, 89, 182, 0.05); border-radius: 8px; border-top: 3px solid #9b59b6;'>",
+      "    <div style='font-size: 3em; font-weight: bold; color: #9b59b6;'>", n_docs, "</div>",
+      "    <div style='font-size: 1.1em; color: #7f8c8d; margin-top: 10px;'>Source Documents</div>",
+      "  </div>",
+      "</div>",
+      missing_line,
+      "</div>"
+    ))
+  })
+  
+  # Quality Summary Table
+  output$quality_summary <- DT::renderDataTable({
+    tables <- c("women_admission", "troops", "hospital_operations", "stations")
+    total_records <- sapply(tables, function(t) {
+      dbGetQuery(conn(), paste("SELECT COUNT(*) as count FROM", t))$count
+    })
+    complete_records <- sapply(tables, function(t) {
+      # Check what columns exist in the table first
+      cols <- dbGetQuery(conn(), paste0("PRAGMA table_info(", t, ")"))$name
+      
+      if (t %in% c("women_admission", "troops")) {
+        if ("doc_id" %in% cols && "source_name" %in% cols) {
+          dbGetQuery(conn(), paste("SELECT COUNT(*) as count FROM", t, "WHERE doc_id IS NOT NULL AND source_name IS NOT NULL"))$count
+        } else {
+          dbGetQuery(conn(), paste("SELECT COUNT(*) as count FROM", t))$count
+        }
+      } else if (t == "hospital_operations") {
+        # hospital_operations now only has station, year, act
+        # Consider complete if station and year are not null
+        if ("station" %in% cols && "year" %in% cols) {
+          dbGetQuery(conn(), paste("SELECT COUNT(*) as count FROM", t, "WHERE station IS NOT NULL AND year IS NOT NULL"))$count
+        } else {
+          dbGetQuery(conn(), paste("SELECT COUNT(*) as count FROM", t))$count
+        }
+      } else if (t == "stations") {
+        dbGetQuery(conn(), paste("SELECT COUNT(*) as count FROM", t, "WHERE name IS NOT NULL"))$count
+      } else {
+        if ("unique_id" %in% cols) {
+          dbGetQuery(conn(), paste("SELECT COUNT(*) as count FROM", t, "WHERE unique_id IS NOT NULL"))$count
+        } else if ("hid" %in% cols) {
+          dbGetQuery(conn(), paste("SELECT COUNT(*) as count FROM", t, "WHERE hid IS NOT NULL"))$count
+        } else {
+          # Fallback: consider all records complete
+          dbGetQuery(conn(), paste("SELECT COUNT(*) as count FROM", t))$count
+        }
+      }
+    })
+    quality_data <- data.frame(Table = tables, Total_Records = total_records, Complete_Records = complete_records)
+    quality_data$Completeness <- round(quality_data$Complete_Records / quality_data$Total_Records * 100, 1)
+    quality_data
+  }, options = list(pageLength = 6, dom = 't'))
+  
+  # (Removed) Missing Data Plot - intentionally removed as per request
+  
   # Data Tables Tab - reactive trigger for refreshing table
   table_refresh <- reactiveVal(0)
   
@@ -1569,133 +1384,8 @@ server <- function(input, output, session) {
   })
 
   # Network: information recorded about Men (Troops)
-  output$med_men_network <- renderForceNetwork({
-    # Get data and filter by timeline
-    year_range <- input$pipeline_years
-    if (is.null(year_range)) year_range <- c(1860, 1890)
-    df <- tryCatch(troops_df(), error = function(e) data.frame())
-    if (!is.data.frame(df) || nrow(df) == 0) {
-      return(forceNetwork(Links = data.frame(source=integer(), target=integer(), value=numeric()),
-                          Nodes = data.frame(name=character(), group=character()),
-                          Source = "source", Target = "target", NodeID = "name", Group = "group"))
-    }
-    df <- df %>% dplyr::filter(year >= year_range[1], year <= year_range[2])
-    validate(need(nrow(df) > 0, "No troop records in selected years"))
-
-    # Helper to compute non-empty coverage
-    non_empty <- function(x) {
-      if (is.numeric(x)) { !is.na(x) } else { !is.na(x) & nzchar(as.character(x)) }
-    }
-
-    # Variable categories mapping
-    var_map <- list(
-      list(cat = "Strength", cols = c("avg_strength")),
-      list(cat = "Admissions", cols = c("total_admissions")),
-      list(cat = "Disease", cols = c("primary_syphilis","secondary_syphilis","gonorrhoea","orchitis_gonorrhoea","phimosis","warts")),
-      list(cat = "Contraction", cols = c("contracted_at_station","contracted_elsewhere")),
-      list(cat = "Ratios", cols = c("ratio_per_1000")),
-      list(cat = "Regiments", cols = c("Regiments")),
-      list(cat = "Occupation", cols = c("period_of_occupation"))
-    )
-
-    pretty_label <- function(x) {
-      x <- gsub("_", " ", x)
-      x <- gsub("ratio per 1000", "Ratio per 1000", x, ignore.case = TRUE)
-      tools::toTitleCase(x)
-    }
-
-    # Build nodes and links
-  nodes <- data.frame(name = "Men (Troops)", group = "Entity", stringsAsFactors = FALSE)
-  links <- data.frame(source = integer(0), target = integer(0), value = numeric(0), stringsAsFactors = FALSE)
-
-    idx <- 1
-    for (grp in var_map) {
-      for (col in grp$cols) {
-        if (col %in% names(df)) {
-          cov <- round(100 * mean(non_empty(df[[col]]), na.rm = TRUE), 1)
-          label <- pretty_label(col)
-          nodes <- rbind(nodes, data.frame(name = label, group = grp$cat, stringsAsFactors = FALSE))
-          links <- rbind(links, data.frame(source = 0, target = idx, value = ifelse(is.finite(cov), max(cov, 0.1), 0.1), stringsAsFactors = FALSE))
-          idx <- idx + 1
-        }
-      }
-    }
-
-    colourScale <- JS(
-      "d3.scaleOrdinal()\n        .domain(['Entity','Strength','Admissions','Disease','Contraction','Ratios','Regiments','Occupation'])\n        .range(['#34495e','#27ae60','#2980b9','#e74c3c','#f39c12','#8e44ad','#16a085','#7f8c8d'])"
-    )
-
-    forceNetwork(
-      Links = links, Nodes = nodes,
-      Source = "source", Target = "target",
-      NodeID = "name", Group = "group",
-      Value = "value", opacity = 0.95, zoom = TRUE,
-      linkDistance = 120, charge = -380,
-      legend = FALSE, fontSize = 12,
-      colourScale = colourScale,
-      opacityNoHover = 0.2,
-      linkColour = "#95a5a6"
-    )
-  })
 
   # Network: information recorded about Women
-  output$med_women_network <- renderForceNetwork({
-    year_range <- input$pipeline_years
-    if (is.null(year_range)) year_range <- c(1860, 1890)
-    df <- tryCatch(women_df(), error = function(e) data.frame())
-    if (!is.data.frame(df) || nrow(df) == 0) {
-      return(forceNetwork(Links = data.frame(source=integer(), target=integer(), value=numeric()),
-                          Nodes = data.frame(name=character(), group=character()),
-                          Source = "source", Target = "target", NodeID = "name", Group = "group"))
-    }
-    df <- df %>% dplyr::filter(year >= year_range[1], year <= year_range[2])
-    validate(need(nrow(df) > 0, "No women records in selected years"))
-
-    non_empty <- function(x) {
-      if (is.numeric(x)) { !is.na(x) } else { !is.na(x) & nzchar(as.character(x)) }
-    }
-
-    var_map <- list(
-      list(cat = "Register", cols = c("women_start_register","women_added","women_removed","women_end_register","avg_registered")),
-      list(cat = "Compliance/Discipline", cols = c("non_attendance_cases","fined_count","imprisonment_count")),
-      list(cat = "Disease", cols = c("disease_primary_syphilis","disease_secondary_syphilis","disease_gonorrhoea","disease_leucorrhoea")),
-      list(cat = "Outcomes", cols = c("discharges","deaths","Total")),
-      list(cat = "Notes", cols = c("side_notes"))
-    )
-
-    pretty_label <- function(x) tools::toTitleCase(gsub("_", " ", x))
-
-  nodes <- data.frame(name = "Women", group = "Entity", stringsAsFactors = FALSE)
-  links <- data.frame(source = integer(0), target = integer(0), value = numeric(0), stringsAsFactors = FALSE)
-    idx <- 1
-    for (grp in var_map) {
-      for (col in grp$cols) {
-        if (col %in% names(df)) {
-          cov <- round(100 * mean(non_empty(df[[col]]), na.rm = TRUE), 1)
-          label <- pretty_label(col)
-          nodes <- rbind(nodes, data.frame(name = label, group = grp$cat, stringsAsFactors = FALSE))
-          links <- rbind(links, data.frame(source = 0, target = idx, value = ifelse(is.finite(cov), max(cov, 0.1), 0.1), stringsAsFactors = FALSE))
-          idx <- idx + 1
-        }
-      }
-    }
-
-    colourScale <- JS(
-      "d3.scaleOrdinal()\n        .domain(['Entity','Register','Compliance/Discipline','Disease','Outcomes','Notes'])\n        .range(['#34495e','#27ae60','#f39c12','#e74c3c','#2980b9','#8e44ad'])"
-    )
-
-    forceNetwork(
-      Links = links, Nodes = nodes,
-      Source = "source", Target = "target",
-      NodeID = "name", Group = "group",
-      Value = "value", opacity = 0.95, zoom = TRUE,
-      linkDistance = 120, charge = -380,
-      legend = FALSE, fontSize = 12,
-      colourScale = colourScale,
-      opacityNoHover = 0.2,
-      linkColour = "#95a5a6"
-    )
-  })
 
   # =====================
   # Medicalization visuals (new)
@@ -2258,203 +1948,6 @@ server <- function(input, output, session) {
     )
   })
 
-  # ---------------------
-  # Temporal-Spatial Correlation Metrics
-  # ---------------------
-  correlation_data <- reactive({
-    w <- women_df()
-    t <- troops_df()
-    
-    if (nrow(w) == 0 || nrow(t) == 0) return(data.frame())
-    # Defensive: if expected derived columns are missing, skip heavy analysis
-    required_w_cols <- c('avg_registered', 'women_added')
-    if (!all(required_w_cols %in% names(w))) {
-      message('correlation_data: missing required women columns; skipping correlation computation')
-      return(data.frame())
-    }
-    # Defensive: ensure troop columns required for correlation exist
-    required_t_cols <- c('avg_strength', 'total_admissions')
-    if (!all(required_t_cols %in% names(t))) {
-      message('correlation_data: missing required troop columns; skipping correlation computation')
-      return(data.frame())
-    }
-    
-    # Aggregate women data by year, region, station
-    women_agg <- w %>%
-      dplyr::group_by(year, region, station, country) %>%
-      dplyr::summarise(
-        total_women_added = sum(women_added, na.rm = TRUE),
-        total_avg_registered = sum(avg_registered, na.rm = TRUE),
-        total_fined = sum(fined_count, na.rm = TRUE),
-        total_imprisoned = sum(imprisonment_count, na.rm = TRUE),
-        total_disease_women = sum(disease_primary_syphilis + disease_secondary_syphilis + 
-                                  disease_gonorrhoea + disease_leucorrhoea, na.rm = TRUE),
-        primary_syphilis_women = sum(disease_primary_syphilis, na.rm = TRUE),
-        secondary_syphilis_women = sum(disease_secondary_syphilis, na.rm = TRUE),
-        gonorrhoea_women = sum(disease_gonorrhoea, na.rm = TRUE),
-        leucorrhoea_women = sum(disease_leucorrhoea, na.rm = TRUE),
-        .groups = 'drop'
-      )
-    
-    # Aggregate troops data
-    troops_agg <- t %>%
-      dplyr::group_by(year, region, station, country) %>%
-      dplyr::summarise(
-        total_troop_strength = sum(avg_strength, na.rm = TRUE),
-        total_vd_admissions = sum(total_admissions, na.rm = TRUE),
-        primary_syphilis_troops = sum(primary_syphilis, na.rm = TRUE),
-        secondary_syphilis_troops = sum(secondary_syphilis, na.rm = TRUE),
-        gonorrhoea_troops = sum(gonorrhoea, na.rm = TRUE),
-        .groups = 'drop'
-      )
-    
-    # Merge women and troops
-    merged <- dplyr::full_join(women_agg, troops_agg, by = c("year", "region", "station", "country"))
-    
-    # Calculate normalized metrics
-    merged %>%
-      dplyr::mutate(
-        # Surveillance intensity (women per 1000 troops)
-        surveillance_index = ifelse(total_troop_strength > 0, 
-                                    (total_women_added + total_avg_registered) / total_troop_strength * 1000, 
-                                    NA_real_),
-        # Punishment rate (per 100 registered women)
-        punishment_rate = ifelse(total_avg_registered > 0,
-                                (total_fined + total_imprisoned * 2) / total_avg_registered * 100,
-                                NA_real_),
-        # Disease tracking rate (women)
-        disease_tracking_rate = ifelse(total_avg_registered > 0,
-                                       total_disease_women / total_avg_registered * 100,
-                                       NA_real_),
-        # Troop VD pressure (per 1000 troops)
-        troop_vd_pressure = ifelse(total_troop_strength > 0,
-                                   total_vd_admissions / total_troop_strength * 1000,
-                                   NA_real_),
-        # Disease rates
-        primary_syphilis_rate = ifelse(total_avg_registered > 0,
-                                       primary_syphilis_women / total_avg_registered * 100,
-                                       NA_real_),
-        secondary_syphilis_rate = ifelse(total_avg_registered > 0,
-                                         secondary_syphilis_women / total_avg_registered * 100,
-                                         NA_real_),
-        gonorrhoea_rate = ifelse(total_avg_registered > 0,
-                                gonorrhoea_women / total_avg_registered * 100,
-                                NA_real_),
-        troop_vd_rate = ifelse(total_troop_strength > 0,
-                              (primary_syphilis_troops + secondary_syphilis_troops + gonorrhoea_troops) / total_troop_strength * 100,
-                              NA_real_),
-        total_diseases = total_disease_women
-      ) %>%
-      dplyr::filter(!is.na(year))
-  })
-
-  # =======================
-  # Hospital Operations Data (cleaned & enriched)
-  # =======================
-  hospital_ops_enriched <- reactive({
-    # Join hospital_operations with hospital_notes for operational details
-    ops <- ops_df()
-    notes <- notes_df()
-    
-    if (nrow(ops) == 0) {
-      message("hospital_ops_enriched: ops_df() returned 0 rows")
-      return(data.frame())
-    }
-    if (nrow(notes) == 0) {
-      message("hospital_ops_enriched: notes_df() returned 0 rows")
-      return(data.frame())
-    }
-    
-    # Join by hid
-    joined <- ops %>%
-      dplyr::left_join(notes, by = "hid", suffix = c("", "_note"))
-    
-    if (nrow(joined) == 0) {
-      message("hospital_ops_enriched: join produced 0 rows")
-      return(data.frame())
-    }
-    
-    # Clean and extract data
-    result <- tryCatch({
-      joined %>%
-        dplyr::mutate(
-          # Clean text fields (remove special characters, normalize)
-          ops_inspection_clean = .strip_specials(ops_inspection_regularity),
-          ops_unlicensed_clean = .strip_specials(ops_unlicensed_control_notes),
-          ops_committee_clean = .strip_specials(ops_committee_activity_notes),
-          remarks_clean = .clean_remarks(.strip_specials(remarks)),
-          
-          # Extract absentee punishment counts from inspection notes
-          absentees_punished = suppressWarnings(as.integer(stringr::str_extract(
-            tolower(paste0(
-              ifelse(is.na(ops_inspection_regularity), "", ops_inspection_regularity), " ",
-              ifelse(is.na(ops_inspection_clean), "", ops_inspection_clean)
-            )),
-            "(?<=\\b)(\\d+)(?=\\s*absentees?\\s*punished)"
-          ))),
-          
-          # Normalize categorical fields
-          inspection_freq_norm = dplyr::case_when(
-            is.na(inspection_freq) | inspection_freq == "" ~ NA_character_,
-            tolower(inspection_freq) %in% c("weekly", "week") ~ "Weekly",
-            tolower(inspection_freq) %in% c("daily", "day") ~ "Daily",
-            tolower(inspection_freq) %in% c("monthly", "month") ~ "Monthly",
-            tolower(inspection_freq) %in% c("fortnightly", "fortnight", "bi-weekly") ~ "Fortnightly",
-            tolower(inspection_freq) %in% c("irregular", "sporadic", "infrequent") ~ "Irregular",
-            TRUE ~ "Other"
-          ),
-          
-          unlicensed_control_norm = dplyr::case_when(
-            is.na(unlicensed_control_type) | unlicensed_control_type == "" ~ NA_character_,
-            tolower(unlicensed_control_type) == "police_action" ~ "Police Action",
-            tolower(unlicensed_control_type) == "special_constables" ~ "Special Constables",
-            tolower(unlicensed_control_type) == "other" ~ "Other Methods",
-            TRUE ~ "Other Methods"
-          ),
-          
-          committee_supervision_norm = dplyr::case_when(
-            is.na(committee_supervision) | committee_supervision == "" ~ NA_character_,
-            grepl("magistrate", tolower(committee_supervision), fixed = FALSE) ~ "Magistrate Oversight",
-            grepl("subcommittee.*regular", tolower(committee_supervision), fixed = FALSE) ~ "Regular Subcommittee",
-            grepl("subcommittee.*irregular", tolower(committee_supervision), fixed = FALSE) ~ "Irregular Subcommittee",
-            grepl("subcommittee", tolower(committee_supervision), fixed = FALSE) ~ "Subcommittee",
-            grepl("committee", tolower(committee_supervision), fixed = FALSE) ~ "Committee",
-            TRUE ~ "Other"
-          ),
-          
-          # Create administrative intensity score (0-3)
-          admin_intensity = (
-            ((!is.na(inspection_freq_norm)) & (inspection_freq_norm %in% c("Weekly", "Daily"))) * 1 +
-            ((!is.na(unlicensed_control_norm)) & (unlicensed_control_norm == "Police Action")) * 1 +
-            ((!is.na(committee_supervision_norm)) & (committee_supervision_norm %in% c("Regular Subcommittee", "Committee"))) * 1
-          ),
-          # Staff mentions (proxy): count occurrences in combined cleaned text
-          .combined_text = tolower(paste0(
-            ifelse(is.na(ops_committee_clean), "", ops_committee_clean), " ",
-            ifelse(is.na(ops_unlicensed_clean), "", ops_unlicensed_clean), " ",
-            ifelse(is.na(remarks_clean), "", remarks_clean)
-          )),
-          staff_male_mentions = (
-            stringr::str_count(.combined_text, "\\b(surgeon|apothecary|doctor|medical officer|secretary)\\b")
-          ),
-          staff_female_mentions = (
-            stringr::str_count(.combined_text, "\\b(matron|nurse|midwife|ayah)\\b")
-          )
-        ) %>%
-        dplyr::filter(!is.na(station), !is.na(year))
-    }, error = function(e) {
-      message("Error in hospital_ops_enriched: ", e$message)
-      return(data.frame())
-    })
-    
-    if (nrow(result) == 0) {
-      message("hospital_ops_enriched: final result has 0 rows")
-    } else {
-      message("hospital_ops_enriched: returning ", nrow(result), " rows")
-    }
-    
-    result
-  })
 
   # Dynamic filter controls for Hospital Notes
   output$hn_station_select <- renderUI({
@@ -2584,335 +2077,15 @@ server <- function(input, output, session) {
 
 
   # Temporal
-  output$med_temporal_women_added <- renderPlotly({
-    # Interactive time series: women brought to hospital (admissions via disease cases)
-    # with vertical markers for key Acts (1864, 1868, 1880) and optional overlay of registration adds
-    w <- women_df()
-    validate(need(nrow(w) > 0, "No women_admission data found"))
-
-    yearly <- w %>%
-      dplyr::mutate(
-        year = as.integer(year),
-        women_brought = rowSums(cbind(
-          suppressWarnings(as.numeric(disease_primary_syphilis)),
-          suppressWarnings(as.numeric(disease_secondary_syphilis)),
-          suppressWarnings(as.numeric(disease_gonorrhoea)),
-          suppressWarnings(as.numeric(disease_leucorrhoea))
-        ), na.rm = TRUE)
-      ) %>%
-      dplyr::group_by(year) %>%
-      dplyr::summarise(
-        women_brought = sum(women_brought, na.rm = TRUE),
-        women_added = sum(suppressWarnings(as.numeric(women_added)), na.rm = TRUE),
-        .groups = 'drop'
-      ) %>%
-      dplyr::filter(!is.na(year)) %>%
-      dplyr::arrange(year)
-
-    validate(need(nrow(yearly) > 0, "No yearly aggregates available"))
-
-    p <- plot_ly(yearly, x = ~year) %>%
-      add_trace(y = ~women_brought, name = 'Women brought to hospital', type = 'scatter', mode = 'lines+markers',
-                line = list(color = '#e74c3c', width = 2), marker = list(size = 7, color = '#e74c3c')) %>%
-      add_trace(y = ~women_added, name = 'Women added to registration', type = 'scatter', mode = 'lines',
-                line = list(color = '#7f8c8d', dash = 'dot', width = 1.5)) %>%
-      layout(
-        title = list(text = 'Women Brought to Lock Hospitals (with Acts markers)', font = list(size = 16)),
-        xaxis = list(title = 'Year'),
-        yaxis = list(title = 'Number of Women'),
-        legend = list(orientation = 'h'),
-        hovermode = 'x unified',
-        shapes = list(
-          # 1864: Early CD Acts (XII and XXII)
-          list(type = 'line', x0 = 1864, x1 = 1864, y0 = 0, y1 = 1, yref = 'paper',
-               line = list(color = '#3498db', width = 2, dash = 'dash')),
-          # 1868: Act XIV of 1868
-          list(type = 'line', x0 = 1868, x1 = 1868, y0 = 0, y1 = 1, yref = 'paper',
-               line = list(color = '#e67e22', width = 2, dash = 'dash')),
-          # 1880: Act III of 1880
-          list(type = 'line', x0 = 1880, x1 = 1880, y0 = 0, y1 = 1, yref = 'paper',
-               line = list(color = '#9b59b6', width = 2, dash = 'dash'))
-        ),
-        annotations = list(
-          list(x = 1864, y = 1, xref = 'x', yref = 'paper', text = 'CD Acts (1864)',
-               showarrow = FALSE, xanchor = 'left', yanchor = 'bottom', font = list(color = '#3498db', size = 10)),
-          list(x = 1868, y = 1, xref = 'x', yref = 'paper', text = 'Act XIV (1868)',
-               showarrow = FALSE, xanchor = 'left', yanchor = 'bottom', font = list(color = '#e67e22', size = 10)),
-          list(x = 1880, y = 1, xref = 'x', yref = 'paper', text = 'Act III (1880)',
-               showarrow = FALSE, xanchor = 'left', yanchor = 'bottom', font = list(color = '#9b59b6', size = 10))
-        )
-      )
-
-    p
-  })
-  output$med_temporal_avg_registered <- renderPlotly({
-    w <- women_df()
-    validate(need(nrow(w) > 0, "No women_admission data found"))
-    yearly <- w %>% dplyr::group_by(year) %>%
-      dplyr::summarise(avg_registered = sum(avg_registered, na.rm = TRUE), .groups = 'drop') %>% dplyr::arrange(year)
-    p <- ggplot(yearly, aes(year, avg_registered)) +
-      geom_line(color = "#3498db", linewidth = 1) +
-      geom_point(color = "#3498db", size = 2) +
-      theme_minimal() + labs(title = "Total Registered Women Under Surveillance", x = "Year", y = "Number of Women")
-    ggplotly(p)
-  })
-  output$med_temporal_ops_over_time <- renderPlotly({
-    o <- ops_df()
-    validate(need(nrow(o) > 0, "No hospital_operations data found"))
-    yearly <- o %>% dplyr::group_by(year) %>% dplyr::summarise(hospital_count = dplyr::n(), .groups = 'drop') %>% dplyr::arrange(year)
-    p <- ggplot(yearly, aes(year, hospital_count)) +
-      geom_col(fill = "#2ecc71", alpha = 0.8) +
-      theme_minimal() + labs(title = "Lock Hospital Operations", x = "Year", y = "Number of Hospital Operations")
-    ggplotly(p)
-  })
-  output$med_temporal_records_created <- renderPlotly({
-    w <- women_df()
-    validate(need(nrow(w) > 0, "No women_admission data found"))
-    yearly <- w %>% dplyr::group_by(year) %>% dplyr::summarise(records = dplyr::n(), .groups = 'drop') %>% dplyr::arrange(year)
-    p <- ggplot(yearly, aes(year, records)) +
-      geom_line(color = "#9b59b6", linewidth = 1) +
-      geom_point(color = "#9b59b6", size = 2) +
-      theme_minimal() + labs(title = "Bureaucratic Output: Data Records Created", x = "Year", y = "Number of Records")
-    ggplotly(p)
-  })
 
   # Geography
-  output$med_geo_women_added_by_region <- renderPlotly({
-    w <- women_df()
-    validate(need(nrow(w) > 0, "No women_admission data found"))
-    reg <- w %>% dplyr::group_by(region) %>% dplyr::summarise(women_added = sum(women_added, na.rm = TRUE), .groups = 'drop') %>% dplyr::filter(!is.na(region)) %>% dplyr::arrange(women_added)
-    p <- ggplot(reg, aes(x = reorder(region, women_added), y = women_added)) +
-      geom_col(fill = "#e67e22", alpha = 0.85) + coord_flip() + theme_minimal() +
-      labs(title = "Women Added to System by Region", x = "Region", y = "Number of Women")
-    ggplotly(p)
-  })
-  output$med_geo_avg_registered_by_region <- renderPlotly({
-    w <- women_df()
-    validate(need(nrow(w) > 0, "No women_admission data found"))
-    reg <- w %>% dplyr::group_by(region) %>% dplyr::summarise(avg_registered = sum(avg_registered, na.rm = TRUE), .groups = 'drop') %>% dplyr::filter(!is.na(region)) %>% dplyr::arrange(avg_registered)
-    p <- ggplot(reg, aes(x = reorder(region, avg_registered), y = avg_registered)) +
-      geom_col(fill = "#1abc9c", alpha = 0.85) + coord_flip() + theme_minimal() +
-      labs(title = "Total Registered Women by Region", x = "Region", y = "Number of Women")
-    ggplotly(p)
-  })
 
   # Disease
-  output$med_disease_pie <- renderPlotly({
-    w <- women_df()
-    validate(need(nrow(w) > 0, "No women_admission data found"))
-    totals <- data.frame(
-      Disease = c("Primary Syphilis", "Secondary Syphilis", "Gonorrhoea", "Leucorrhoea"),
-      Cases = c(sum(w$disease_primary_syphilis, na.rm = TRUE),
-                sum(w$disease_secondary_syphilis, na.rm = TRUE),
-                sum(w$disease_gonorrhoea, na.rm = TRUE),
-                sum(w$disease_leucorrhoea, na.rm = TRUE))
-    )
-    plot_ly(totals, labels = ~Disease, values = ~Cases, type = 'pie',
-            textinfo = 'label+percent', insidetextorientation = 'radial',
-            marker = list(colors = c('#e74c3c','#c0392b','#e67e22','#f39c12')))
-  })
-  output$med_disease_bar <- renderPlotly({
-    w <- women_df()
-    validate(need(nrow(w) > 0, "No women_admission data found"))
-    totals <- data.frame(
-      Disease = c("Primary Syphilis", "Secondary Syphilis", "Gonorrhoea", "Leucorrhoea"),
-      Cases = c(sum(w$disease_primary_syphilis, na.rm = TRUE),
-                sum(w$disease_secondary_syphilis, na.rm = TRUE),
-                sum(w$disease_gonorrhoea, na.rm = TRUE),
-                sum(w$disease_leucorrhoea, na.rm = TRUE))
-    )
-    p <- ggplot(totals, aes(Disease, Cases, fill = Disease)) +
-      geom_col(alpha = 0.85) + theme_minimal() + theme(legend.position = "none") +
-      scale_fill_manual(values = c('#e74c3c','#c0392b','#e67e22','#f39c12')) +
-      labs(title = "Total Cases by Disease Category", y = "Number of Cases") +
-      theme(axis.text.x = element_text(angle = 45, hjust = 1))
-    ggplotly(p)
-  })
 
   # Punitive
   # Military-Medical: Interactive Surveillance Pipeline (Sankey diagram)
-  output$med_surveillance_sankey <- renderSankeyNetwork({
-    # Get filtered year range
-    year_range <- input$pipeline_years
-    if (is.null(year_range)) year_range <- c(1860, 1890)
-    
-    # Get aggregated data by year and station with Act info
-    df <- dbGetQuery(conn(), "
-      SELECT 
-        t.station,
-        t.year,
-        ho.act,
-        t.region,
-        SUM(t.total_admissions) as military_vd,
-        SUM(w.women_added) as women_admitted,
-        SUM(w.avg_registered) as women_registered,
-        SUM(w.fined_count + w.imprisonment_count) as punitive_actions
-      FROM troops t
-      LEFT JOIN hospital_operations ho ON t.station = ho.station AND t.year = ho.year
-      LEFT JOIN women_admission w ON t.station = w.station AND t.year = w.year
-      WHERE t.year >= ? AND t.year <= ?
-      GROUP BY t.station, t.year, ho.act, t.region
-      ORDER BY t.year
-    ", params = list(year_range[1], year_range[2]))
-    
-    validate(need(nrow(df) > 0, "No data available for selected year range"))
-    
-    # Map Acts to readable names
-    df$act_name <- ifelse(is.na(df$act) | df$act == "None", "No Act", 
-                   ifelse(df$act == "Act XXII of 1864", "Act XXII (1864)",
-                   ifelse(df$act == "Act VI of 1868", "Act VI (1868)",
-                   ifelse(df$act == "Act XIV of 1868", "Act XIV (1868)",
-                   ifelse(df$act == "Act III of 1880", "Act III (1880)", df$act)))))
-    
-    # Aggregate flows
-    agg <- df %>%
-      group_by(act_name) %>%
-      summarise(
-        military_vd = sum(military_vd, na.rm = TRUE),
-        women_admitted = sum(women_admitted, na.rm = TRUE),
-        women_registered = sum(women_registered, na.rm = TRUE),
-        stations = n_distinct(station),
-        .groups = 'drop'
-      )
-    
-    # Create Sankey nodes
-    nodes <- data.frame(
-      name = c(
-        "Military VD Cases",           # 0
-        "Act XXII (1864)",             # 1
-        "Act VI (1868)",               # 2
-        "Act XIV (1868)",              # 3
-        "Act III (1880)",              # 4
-        "No Act",                      # 5
-        "Women Admitted",              # 6
-        "Women Registered"             # 7
-      ),
-      stringsAsFactors = FALSE
-    )
-    
-    # Create links (flows) - collect as list then convert to df
-    links_list <- list()
-    
-    # Precompute totals for percentage calculations
-    total_military <- sum(agg$military_vd, na.rm = TRUE)
-    total_women_adm <- sum(agg$women_admitted, na.rm = TRUE)
-
-    # Flow 1: Military VD → Acts (or No Act), as percentage of total military VD cases
-    if (nrow(agg) > 0) {
-      for (i in seq_len(nrow(agg))) {
-        act <- agg$act_name[i]
-        val <- agg$military_vd[i]
-        if (!is.na(val) && val > 0 && total_military > 0) {
-          target_idx <- which(nodes$name == act) - 1  # 0-indexed
-          if (length(target_idx) > 0) {
-            pct <- round(100 * val / total_military, 1)
-            links_list[[length(links_list) + 1]] <- list(
-              source = 0,
-              target = target_idx,
-              value = pct,
-              group = act
-            )
-          }
-        }
-      }
-    }
-    
-    # Flow 2: Acts → Women Admitted, as percentage of total women admitted
-    if (nrow(agg) > 0) {
-      for (i in seq_len(nrow(agg))) {
-        act <- agg$act_name[i]
-        val <- agg$women_admitted[i]
-        if (!is.na(val) && val > 0 && total_women_adm > 0) {
-          source_idx <- which(nodes$name == act) - 1
-          if (length(source_idx) > 0) {
-            pct <- round(100 * val / total_women_adm, 1)
-            links_list[[length(links_list) + 1]] <- list(
-              source = source_idx,
-              target = 6,  # Women Admitted
-              value = pct,
-              group = act
-            )
-          }
-        }
-      }
-    }
-    
-    # Flow 3: Women Admitted → Women Registered, as percentage of women admitted
-    total_admitted <- sum(agg$women_admitted, na.rm = TRUE)
-    total_registered <- sum(agg$women_registered, na.rm = TRUE)
-    if (!is.na(total_admitted) && !is.na(total_registered) && 
-        total_admitted > 0 && total_registered > 0) {
-      pct_reg <- round(100 * total_registered / total_admitted, 1)
-      links_list[[length(links_list) + 1]] <- list(
-        source = 6,
-        target = 7,
-        value = pct_reg,
-        group = "surveillance"
-      )
-    }
-    
-    # Convert list to data frame
-    validate(need(length(links_list) > 0, "No flows to display for selected year range"))
-    
-    links <- do.call(rbind, lapply(links_list, function(x) {
-      data.frame(
-        source = as.integer(x$source),
-        target = as.integer(x$target),
-        value = as.numeric(x$value),
-        group = as.character(x$group),
-        stringsAsFactors = FALSE
-      )
-    }))
-    
-    # Create Sankey diagram
-    sankeyNetwork(
-      Links = links,
-      Nodes = nodes,
-      Source = "source",
-      Target = "target",
-      Value = "value",
-      NodeID = "name",
-      units = "%",
-      fontSize = 13,
-      nodeWidth = 25,
-      nodePadding = 15,
-      height = 550,
-      width = NULL,
-      sinksRight = TRUE,
-      iterations = 100,
-      LinkGroup = "group",
-      colourScale = JS("
-        d3.scaleOrdinal()
-          .domain(['Act XXII (1864)', 'Act VI (1868)', 'Act XIV (1868)', 'Act III (1880)', 'No Act', 'surveillance'])
-          .range(['#e74c3c', '#f39c12', '#9b59b6', '#2c3e50', '#bdc3c7', '#3498db'])
-      ")
-    )
-  })
 
   # Acts
-  output$med_acts_total <- renderPlotly({
-    acts <- dbGetQuery(conn(), "
-      SELECT act, COUNT(*) as count 
-      FROM hospital_operations 
-      WHERE act IS NOT NULL AND act != 'None'
-      GROUP BY act 
-      ORDER BY count DESC
-    ")
-    validate(need(nrow(acts) > 0, "No acts data found"))
-    p <- ggplot(acts, aes(x = reorder(act, count), y = count)) + geom_col(fill = "#2c3e50", alpha = 0.85) + coord_flip() + theme_minimal() + labs(title = "Implementation of CD Acts", x = "Act", y = "Number of Implementations")
-    ggplotly(p)
-  })
-  output$med_acts_timeline <- renderPlotly({
-    acts_temp <- dbGetQuery(conn(), "
-      SELECT year, act, COUNT(*) as count 
-      FROM hospital_operations 
-      WHERE act IS NOT NULL AND act != 'None'
-      GROUP BY year, act
-    ")
-    validate(need(nrow(acts_temp) > 0, "No acts temporal data found"))
-    p <- ggplot(acts_temp, aes(x = year, y = count, fill = act)) + geom_area(position = 'stack', alpha = 0.7) + theme_minimal() + labs(title = "Acts Implementation Timeline", x = "Year", y = "Number of Stations")
-    ggplotly(p)
-  })
   output$med_acts_by_station <- DT::renderDataTable({
     df <- dbGetQuery(conn(), "
       SELECT station, act, COUNT(*) as count
@@ -2925,127 +2098,6 @@ server <- function(input, output, session) {
   })
   
   # Acts Animated Map
-  output$acts_animated_map <- renderLeaflet({
-    req(input$acts_year)  # Require year input
-    
-    year_selected <- input$acts_year
-    show_lines <- isTRUE(input$show_network_lines)
-    act_filter <- if (is.null(input$network_act_filter)) "all" else input$network_act_filter
-    
-    # Get all stations with coordinates
-    stations <- stations_df()
-    if (nrow(stations) == 0) {
-      return(leaflet() %>% addTiles() %>% setView(lng = 80, lat = 20, zoom = 4))
-    }
-    
-      # Detect station name column and lat/lon columns
-      station_col <- if ("name" %in% names(stations)) "name" else if ("station" %in% names(stations)) "station" else NULL
-      lat_col <- if ("latitude" %in% names(stations)) "latitude" else if ("lat" %in% names(stations)) "lat" else NULL
-      lon_col <- if ("longitude" %in% names(stations)) "longitude" else if ("lon" %in% names(stations)) "lon" else if ("lng" %in% names(stations)) "lng" else NULL
-    
-      if (is.null(station_col) || is.null(lat_col) || is.null(lon_col)) {
-      return(leaflet() %>% addTiles() %>% setView(lng = 80, lat = 20, zoom = 4))
-    }
-    
-    # Get Acts cumulative data up to selected year
-    acts_cumulative <- dbGetQuery(conn(), sprintf("
-      SELECT station, act, MIN(year) as first_year, MAX(year) as last_year, COUNT(*) as total_records
-      FROM hospital_operations
-      WHERE act IS NOT NULL AND act != 'None' AND TRIM(act) != ''
-        AND year <= %d
-      GROUP BY station, act
-    ", year_selected))
-    
-    if (nrow(acts_cumulative) == 0) {
-      # Show empty map with message
-      return(leaflet() %>% addTiles() %>% setView(lng = 80, lat = 20, zoom = 4))
-    }
-    
-    # Apply Act filter
-    if (act_filter != "all") {
-      acts_cumulative <- acts_cumulative %>% filter(act == act_filter)
-      if (nrow(acts_cumulative) == 0) {
-        return(leaflet() %>% addTiles() %>% setView(lng = 80, lat = 20, zoom = 4))
-      }
-    }
-    
-      # Normalize names and join with station coordinates robustly
-      acts_norm <- acts_cumulative %>%
-        dplyr::mutate(station_key = tolower(trimws(station)))
-      stations_norm <- stations %>%
-        dplyr::mutate(station_key = tolower(trimws(!!sym(station_col))))
-    
-      acts_with_coords <- acts_norm %>%
-        dplyr::inner_join(stations_norm, by = "station_key") %>%
-      filter(!is.na(!!sym(lat_col)), !is.na(!!sym(lon_col))) %>%
-      mutate(
-        lat = as.numeric(!!sym(lat_col)), 
-        lon = as.numeric(!!sym(lon_col))
-      ) %>%
-      filter(lat >= -90, lat <= 90, lon >= -180, lon <= 180)
-    
-    if (nrow(acts_with_coords) == 0) {
-      return(leaflet() %>% addTiles() %>% setView(lng = 80, lat = 20, zoom = 4))
-    }
-    
-    # Get active stations for this specific year
-    acts_this_year <- dbGetQuery(conn(), sprintf("
-      SELECT DISTINCT station
-      FROM hospital_operations
-      WHERE act IS NOT NULL AND act != 'None' AND TRIM(act) != ''
-        AND year = %d
-    ", year_selected))
-    
-    active_stations <- if (nrow(acts_this_year) > 0) acts_this_year$station else character(0)
-    
-    # Mark active stations
-    acts_with_coords <- acts_with_coords %>%
-      mutate(active_this_year = station %in% active_stations)
-    
-    # Color palette
-    act_colors <- c(
-      "Contagious Diseases Act 1868" = "#3498db",       # Blue
-      "Cantonment Act 1864" = "#e74c3c",                # Red
-      "Cantonment Act 1880" = "#9b59b6",                # Purple
-      "Cantonment Act 1889" = "#f39c12",                # Orange
-      "Voluntary System" = "#27ae60"                    # Green
-    )
-    
-    # Create visualization attributes
-    acts_with_coords <- acts_with_coords %>%
-      mutate(
-        color = ifelse(act %in% names(act_colors), act_colors[act], "#95a5a6"),
-        opacity = ifelse(active_this_year, 0.9, 0.3),
-        radius = pmax(5, sqrt(total_records) * 2),
-        popup_text = paste0(
-          "<b>", station, "</b><br>",
-          "<b>Act:</b> ", act, "<br>",
-          "<b>First Year:</b> ", first_year, "<br>",
-          "<b>Last Year:</b> ", last_year, "<br>",
-          "<b>Records:</b> ", total_records,
-          ifelse(active_this_year, 
-                 paste0("<br><b style='color:#27ae60'>Active in ", year_selected, "</b>"), 
-                 paste0("<br><span style='color:#999'>Inactive in ", year_selected, "</span>"))
-        ),
-        label_text = paste0(station, ": ", act)
-      )
-    
-    # Create base map
-    m <- leaflet(acts_with_coords) %>% 
-      addTiles() %>%
-      addCircleMarkers(
-        ~lon, ~lat, 
-        radius = ~radius,
-        color = ~color,
-        fillOpacity = ~opacity,
-        stroke = TRUE,
-        weight = 1,
-        popup = ~popup_text,
-        label = ~label_text
-      )
-    
-    m
-  })
   
   # Populate Act filter choices dynamically
   observe({
@@ -3063,117 +2115,8 @@ server <- function(input, output, session) {
   })
   
   # Acts Year Summary
-  output$acts_year_summary <- renderPlotly({
-    year_selected <- input$acts_year
-    
-    acts_summary <- dbGetQuery(conn(), sprintf("
-      SELECT act, COUNT(DISTINCT station) as stations
-      FROM hospital_operations
-      WHERE act IS NOT NULL AND act != 'None' AND TRIM(act) != ''
-        AND year <= %d
-      GROUP BY act
-      ORDER BY stations DESC
-    ", year_selected))
-    
-    if (nrow(acts_summary) == 0) {
-      return(plot_ly() %>% 
-        add_annotations(text = paste("No Acts data for", year_selected), 
-                       showarrow = FALSE, 
-                       font = list(size = 16)))
-    }
-    
-    p <- plot_ly(acts_summary, x = ~act, y = ~stations, type = 'bar',
-                marker = list(color = '#27ae60')) %>%
-      layout(
-        title = paste("Cumulative Acts Implementation by", year_selected),
-        xaxis = list(title = "Act"),
-        yaxis = list(title = "Number of Stations"),
-        showlegend = FALSE
-      )
-    p
-  })
 
   # Summary
-  output$med_summary_html <- renderUI({
-    w <- women_df(); t <- troops_df(); s <- stations_df(); o <- ops_df()
-    if (nrow(w) == 0) return(HTML("<em>No women_admission data found</em>"))
-    # Format helper
-    fmt <- function(x) formatC(x, format = "f", big.mark = ",", digits = 0)
-    stations_n <- fmt(nrow(s))
-    women_n <- fmt(nrow(w))
-    ops_n <- fmt(nrow(o))
-    troops_n <- fmt(nrow(t))
-    women_added <- fmt(sum(w$women_added, na.rm = TRUE))
-    avg_registered <- fmt(sum(w$avg_registered, na.rm = TRUE))
-    discharges <- fmt(sum(w$discharges, na.rm = TRUE))
-    deaths <- fmt(sum(w$deaths, na.rm = TRUE))
-    p1 <- fmt(sum(w$disease_primary_syphilis, na.rm = TRUE))
-    p2 <- fmt(sum(w$disease_secondary_syphilis, na.rm = TRUE))
-    gon <- fmt(sum(w$disease_gonorrhoea, na.rm = TRUE))
-    leu <- fmt(sum(w$disease_leucorrhoea, na.rm = TRUE))
-    total_disease <- fmt(sum(w$disease_primary_syphilis, na.rm = TRUE) + sum(w$disease_secondary_syphilis, na.rm = TRUE) + sum(w$disease_gonorrhoea, na.rm = TRUE) + sum(w$disease_leucorrhoea, na.rm = TRUE))
-    fined <- fmt(sum(w$fined_count, na.rm = TRUE))
-    impr <- fmt(sum(w$imprisonment_count, na.rm = TRUE))
-    nonatt <- fmt(sum(w$non_attendance_cases, na.rm = TRUE))
-    strength <- fmt(sum(t$avg_strength, na.rm = TRUE))
-    vd <- fmt(sum(t$total_admissions, na.rm = TRUE))
-    
-    # Count each Act separately
-    acts_counts <- dbGetQuery(conn(), "
-      SELECT act, COUNT(DISTINCT station) as station_count, COUNT(*) as total_records
-      FROM hospital_operations
-      WHERE act IS NOT NULL AND act != 'None' AND TRIM(act) != ''
-      GROUP BY act
-      ORDER BY station_count DESC
-    ")
-    
-    acts_text <- ""
-    if (nrow(acts_counts) > 0) {
-      for (i in 1:nrow(acts_counts)) {
-        acts_text <- paste0(acts_text, 
-          "   • ", acts_counts$act[i], ": ", 
-          fmt(acts_counts$station_count[i]), " stations (", 
-          fmt(acts_counts$total_records[i]), " records)\n")
-      }
-    } else {
-      acts_text <- "   • No Acts data available\n"
-    }
-    
-    summary_text <- paste0(
-      "<pre style='font-family:Menlo,monospace; white-space:pre-wrap'>",
-      "THE TRANSFORMATION OF WOMEN'S BODIES INTO ADMINISTRATIVE CATEGORIES\n",
-      "Data from British India Lock Hospitals (1873-1890)\n\n",
-      "SCALE OF SURVEILLANCE\n",
-      "   • ", stations_n, " Lock Hospital Stations across British India\n",
-      "   • ", women_n, " Women's Records Created\n",
-      "   • ", ops_n, " Hospital Operations Documented\n",
-      "   • ", troops_n, " Military Troop Records\n\n",
-      "WOMEN PROCESSED THROUGH THE SYSTEM\n",
-      "   • ", women_added, " Women Added to Registration\n",
-      "   • ", avg_registered, " Total Registered Women\n",
-      "   • ", discharges, " Discharges\n",
-      "   • ", deaths, " Deaths in System\n\n",
-      "DISEASE CATEGORIZATION\n",
-      "   • ", p1, " Primary Syphilis Cases\n",
-      "   • ", p2, " Secondary Syphilis Cases\n",
-      "   • ", gon, " Gonorrhoea Cases\n",
-      "   • ", leu, " Leucorrhoea Cases\n",
-      "   • ", total_disease, " TOTAL Disease Cases Documented\n\n",
-      "PUNITIVE MEASURES\n",
-      "   • ", fined, " Women Fined\n",
-      "   • ", impr, " Women Imprisoned\n",
-      "   • ", nonatt, " Non-Attendance Cases (Resistance)\n\n",
-      "MILITARY RATIONALE\n",
-      "   • ", strength, " Total Military Strength\n",
-      "   • ", vd, " VD Cases in Military\n",
-      "   • Women's bodies regulated to protect military health\n\n",
-      "CONTAGIOUS DISEASES ACTS IMPLEMENTATION\n",
-      acts_text,
-      "   • Compulsory registration, examination, and detention\n",
-      "</pre>"
-    )
-    HTML(summary_text)
-  })
 
   # Stations Map
   output$stations_map <- renderLeaflet({
@@ -3207,241 +2150,12 @@ server <- function(input, output, session) {
   # ---------------------
   # Temporal-Spatial Correlation Outputs
   # ---------------------
-  output$correlation_dual_axis <- renderPlotly({
-    corr <- correlation_data()
-    validate(need(nrow(corr) > 0, "No correlation data available"))
-    
-    # Aggregate by year for dual-axis time series
-    yearly <- corr %>%
-      dplyr::group_by(year) %>%
-      dplyr::summarise(
-        avg_surveillance_index = mean(surveillance_index, na.rm = TRUE),
-        avg_troop_vd_pressure = mean(troop_vd_pressure, na.rm = TRUE),
-        .groups = 'drop'
-      ) %>%
-      dplyr::filter(!is.na(avg_surveillance_index) | !is.na(avg_troop_vd_pressure))
-    
-    validate(need(nrow(yearly) > 0, "No yearly aggregate data available"))
-    
-    # Create dual-axis plot
-    p <- plot_ly(yearly, x = ~year) %>%
-      add_trace(y = ~avg_surveillance_index, name = 'Surveillance Index (Women per 1000 Troops)',
-                type = 'scatter', mode = 'lines+markers', line = list(color = '#e74c3c', width = 2),
-                marker = list(size = 8, color = '#e74c3c'), yaxis = 'y') %>%
-      add_trace(y = ~avg_troop_vd_pressure, name = 'Troop VD Pressure (per 1000 Troops)',
-                type = 'scatter', mode = 'lines+markers', line = list(color = '#3498db', width = 2),
-                marker = list(size = 8, color = '#3498db'), yaxis = 'y2') %>%
-      layout(
-        title = list(text = 'Surveillance Intensity vs. Military VD Pressure (Dual-Axis)', font = list(size = 16)),
-        xaxis = list(title = 'Year'),
-        yaxis = list(title = 'Surveillance Index', titlefont = list(color = '#e74c3c'), tickfont = list(color = '#e74c3c')),
-        yaxis2 = list(title = 'Troop VD Pressure', overlaying = 'y', side = 'right',
-                      titlefont = list(color = '#3498db'), tickfont = list(color = '#3498db')),
-        hovermode = 'x unified',
-        shapes = list(
-          # Mark Act XIV period (1868)
-          list(type = 'line', x0 = 1868, x1 = 1868, y0 = 0, y1 = 1, yref = 'paper',
-               line = list(color = 'orange', width = 2, dash = 'dash')),
-          # Mark Act III period (1880)
-          list(type = 'line', x0 = 1880, x1 = 1880, y0 = 0, y1 = 1, yref = 'paper',
-               line = list(color = 'purple', width = 2, dash = 'dash'))
-        ),
-        annotations = list(
-          list(x = 1868, y = 1, xref = 'x', yref = 'paper', text = 'Act XIV (1868)',
-               showarrow = FALSE, xanchor = 'left', yanchor = 'bottom', font = list(color = 'orange', size = 10)),
-          list(x = 1880, y = 1, xref = 'x', yref = 'paper', text = 'Act III (1880)',
-               showarrow = FALSE, xanchor = 'left', yanchor = 'bottom', font = list(color = 'purple', size = 10))
-        )
-      )
-    p
-  })
-  
-  output$correlation_scatter <- renderPlotly({
-    corr <- correlation_data()
-    validate(need(nrow(corr) > 0, "No correlation data available"))
-    corr_clean <- corr %>% dplyr::filter(!is.na(surveillance_index), !is.na(troop_vd_pressure))
-    validate(need(nrow(corr_clean) > 0, "No data points with both metrics"))
-    
-    p <- plot_ly(corr_clean, x = ~troop_vd_pressure, y = ~surveillance_index, 
-                 text = ~paste0(station, " (", year, ")"), color = ~year, size = ~punishment_rate,
-                 type = 'scatter', mode = 'markers', colors = 'Viridis',
-                 marker = list(sizemode = 'diameter', sizeref = 0.5, line = list(width = 0.5, color = 'white'))) %>%
-      layout(title = 'Military VD Pressure vs. Surveillance Intensity',
-             xaxis = list(title = 'Troop VD Pressure (per 1000)'),
-             yaxis = list(title = 'Surveillance Index (Women per 1000 Troops)'),
-             hovermode = 'closest')
-    p
-  })
-  
-  output$correlation_metrics_table <- DT::renderDataTable({
-    corr <- correlation_data()
-    validate(need(nrow(corr) > 0, "No correlation data available"))
-    
-    summary_table <- corr %>%
-      dplyr::group_by(region) %>%
-      dplyr::summarise(
-        Stations = dplyr::n_distinct(station),
-        `Avg Surveillance Index` = round(mean(surveillance_index, na.rm = TRUE), 2),
-        `Avg Punishment Rate` = round(mean(punishment_rate, na.rm = TRUE), 2),
-        `Avg Troop VD Pressure` = round(mean(troop_vd_pressure, na.rm = TRUE), 2),
-        `Total Women Registered` = sum(total_avg_registered, na.rm = TRUE),
-        `Total Troops` = sum(total_troop_strength, na.rm = TRUE),
-        .groups = 'drop'
-      ) %>%
-      dplyr::arrange(desc(`Avg Surveillance Index`))
-    
-    DT::datatable(summary_table, options = list(pageLength = 10, scrollX = TRUE), rownames = FALSE)
-  })
-
   # ---------------------
-  # Admissions by Region - Plots
-  # ---------------------
-  output$admissions_women_by_region <- renderPlotly({
-    w <- women_df()
-    validate(need(nrow(w) > 0, "No women data available"))
 
-    # Compute women's admissions as sum of disease cases recorded
-    w2 <- w %>%
-      dplyr::mutate(
-        year = as.integer(year),
-        women_admissions = rowSums(cbind(
-          suppressWarnings(as.numeric(disease_primary_syphilis)),
-          suppressWarnings(as.numeric(disease_secondary_syphilis)),
-          suppressWarnings(as.numeric(disease_gonorrhoea)),
-          suppressWarnings(as.numeric(disease_leucorrhoea))
-        ), na.rm = TRUE)
-      ) %>%
-      dplyr::filter(!is.na(year), !is.na(region)) %>%
-      dplyr::group_by(year, region) %>%
-      dplyr::summarise(total_women_adm = sum(women_admissions, na.rm = TRUE), .groups = 'drop')
-
-    # Filter by selected regions if provided
-    regs <- input$admissions_regions
-    if (!is.null(regs) && length(regs) > 0) w2 <- dplyr::filter(w2, region %in% regs)
-
-    validate(need(nrow(w2) > 0, "No data for selected regions"))
-
-    plot_ly(w2, x = ~year, y = ~total_women_adm, color = ~region, type = 'scatter', mode = 'lines+markers') %>%
-      layout(
-        title = 'Women Admissions by Region (per year)',
-        xaxis = list(title = 'Year'),
-        yaxis = list(title = 'Total Women Admissions'),
-        legend = list(orientation = 'h')
-      )
-  })
-
-  output$admissions_men_by_region <- renderPlotly({
-    t <- troops_df()
-    validate(need(nrow(t) > 0, "No troops data available"))
-
-    t2 <- t %>%
-      dplyr::mutate(year = as.integer(year)) %>%
-      dplyr::filter(!is.na(year), !is.na(region)) %>%
-      dplyr::group_by(year, region) %>%
-      dplyr::summarise(total_men_adm = sum(suppressWarnings(as.numeric(total_admissions)), na.rm = TRUE), .groups = 'drop')
-
-    regs <- input$admissions_regions
-    if (!is.null(regs) && length(regs) > 0) t2 <- dplyr::filter(t2, region %in% regs)
-
-    validate(need(nrow(t2) > 0, "No data for selected regions"))
-
-    plot_ly(t2, x = ~year, y = ~total_men_adm, color = ~region, type = 'scatter', mode = 'lines+markers') %>%
-      layout(
-        title = 'Men (Troops) Admissions by Region (per year)',
-        xaxis = list(title = 'Year'),
-        yaxis = list(title = 'Total Men Admissions (VD cases)'),
-        legend = list(orientation = 'h')
-      )
-  })
   
   # =====================
   # Story Tab Visualizations
   # =====================
-  
-  # Story: Total stats summary
-  output$story_total_stats <- renderUI({
-    n_docs <- dbGetQuery(conn(), "SELECT COUNT(*) as count FROM documents")$count
-    n_stations <- dbGetQuery(conn(), "SELECT COUNT(*) as count FROM stations")$count
-    n_women <- dbGetQuery(conn(), "SELECT COUNT(*) as count FROM women_admission")$count
-    n_troops <- dbGetQuery(conn(), "SELECT COUNT(*) as count FROM troops")$count
-    
-    # Calculate year ranges and missing years for all datasets
-    women <- women_df()
-    troops <- troops_df()
-    # Use simple hospital_operations instead of enriched version
-    ops <- tryCatch(ops_df(), error = function(e) data.frame())
-    
-    # Helper function to get missing years
-    get_missing_years <- function(years) {
-      years <- sort(unique(na.omit(years)))
-      if (length(years) < 2) return(character(0))
-      yr_min <- min(years)
-      yr_max <- max(years)
-      expected <- seq(yr_min, yr_max)
-      missing <- setdiff(expected, years)
-      if (length(missing) > 0) return(as.character(missing))
-      return(character(0))
-    }
-    
-    women_years <- if (nrow(women) > 0 && "year" %in% names(women)) women$year else numeric(0)
-    troops_years <- if (nrow(troops) > 0 && "year" %in% names(troops)) troops$year else numeric(0)
-    ops_years <- if (nrow(ops) > 0 && "year" %in% names(ops)) ops$year else numeric(0)
-    
-    women_missing <- get_missing_years(women_years)
-    troops_missing <- get_missing_years(troops_years)
-    ops_missing <- get_missing_years(ops_years)
-    
-    # Build missing years summary HTML
-    missing_summary <- ""
-    if (length(women_missing) > 0 || length(troops_missing) > 0 || length(ops_missing) > 0) {
-      missing_parts <- c()
-      if (length(women_missing) > 0) {
-        missing_parts <- c(missing_parts, paste0("<b>Women:</b> ", paste(women_missing, collapse = ", ")))
-      }
-      if (length(troops_missing) > 0) {
-        missing_parts <- c(missing_parts, paste0("<b>Troops:</b> ", paste(troops_missing, collapse = ", ")))
-      }
-      if (length(ops_missing) > 0) {
-        missing_parts <- c(missing_parts, paste0("<b>Hospital Ops:</b> ", paste(ops_missing, collapse = ", ")))
-      }
-      
-      missing_summary <- paste0(
-        "<div style='margin-top:20px; padding:15px; background:#fff3cd; border-left:4px solid #e74c3c; border-radius:4px;'>",
-        "<div style='font-weight:bold; color:#856404; margin-bottom:8px;'>⚠ Missing Years in Data Coverage</div>",
-        "<div style='color:#856404; font-size:0.95em;'>",
-        paste(missing_parts, collapse = "<br>"),
-        "</div>",
-        "</div>"
-      )
-    }
-    
-    HTML(paste0(
-      "<div>",
-      "<!-- Flexbox container for horizontal KPI boxes -->",
-      "<div style='display: flex; justify-content: space-between; align-items: center; gap: 20px; flex-wrap: wrap; margin-bottom: 20px;'>",
-      "  <div style='flex: 1; min-width: 200px; text-align: center; padding: 20px; background: rgba(52, 152, 219, 0.05); border-radius: 8px; border-top: 3px solid #3498db;'>",
-      "    <div style='font-size: 3em; font-weight: bold; color: #3498db;'>", n_stations, "</div>",
-      "    <div style='font-size: 1.1em; color: #7f8c8d; margin-top: 10px;'>Stations</div>",
-      "  </div>",
-      "  <div style='flex: 1; min-width: 200px; text-align: center; padding: 20px; background: rgba(231, 76, 60, 0.05); border-radius: 8px; border-top: 3px solid #e74c3c;'>",
-      "    <div style='font-size: 3em; font-weight: bold; color: #e74c3c;'>", n_women, "</div>",
-      "    <div style='font-size: 1.1em; color: #7f8c8d; margin-top: 10px;'>Women Records</div>",
-      "  </div>",
-      "  <div style='flex: 1; min-width: 200px; text-align: center; padding: 20px; background: rgba(243, 156, 18, 0.05); border-radius: 8px; border-top: 3px solid #f39c12;'>",
-      "    <div style='font-size: 3em; font-weight: bold; color: #f39c12;'>", n_troops, "</div>",
-      "    <div style='font-size: 1.1em; color: #7f8c8d; margin-top: 10px;'>Troop Records</div>",
-      "  </div>",
-      "  <div style='flex: 1; min-width: 200px; text-align: center; padding: 20px; background: rgba(155, 89, 182, 0.05); border-radius: 8px; border-top: 3px solid #9b59b6;'>",
-      "    <div style='font-size: 3em; font-weight: bold; color: #9b59b6;'>", n_docs, "</div>",
-      "    <div style='font-size: 1.1em; color: #7f8c8d; margin-top: 10px;'>Source Documents</div>",
-      "  </div>",
-      "</div>",
-      missing_summary,
-      "</div>"
-    ))
-  })
-  
-  # Story: Overview map
   # Initialize story map once (base map + legend)
   output$story_map_overview <- renderLeaflet({
     leaflet() %>%
@@ -3601,578 +2315,36 @@ server <- function(input, output, session) {
   # End Story Tab
   # =====================
   
-  # ---------------------
-  # Animated Timeline Map Outputs
-  # ---------------------
-  # Initial map render
-  output$animated_timeline_map <- renderLeaflet({
-    leaflet() %>% 
-      addTiles() %>%
-      setView(lng = 78.9629, lat = 20.5937, zoom = 5) %>%  # Center on India
-      addLegend(
-        position = "bottomright",
-        colors = c('#d62728', '#ff7f0e', '#ffbb78', '#c7e9b4', '#cccccc'),
-        labels = c('High (>20%)', 'Medium (10-20%)', 'Low (5-10%)', 'Minimal (<5%)', 'No Data'),
-        title = "Punishment Rate",
-        opacity = 0.7
-      )
-  })
   
-  # Update markers when year changes
-  observe({
-    st <- stations_df()
-    corr <- correlation_data()
-    
-    req(nrow(st) > 0, nrow(corr) > 0, input$timeline_year)
-    
-    # Detect lat/lon columns
-    lat_col <- 'latitude'; lon_col <- 'longitude'
-    if (all(c('lat','lon') %in% names(st))) { lat_col <- 'lat'; lon_col <- 'lon' }
-    if (all(c('lat','lng') %in% names(st))) { lat_col <- 'lat'; lon_col <- 'lng' }
-    
-    st2 <- st %>% 
-      dplyr::filter(!is.na(.data[[lat_col]]), !is.na(.data[[lon_col]])) %>%
-      dplyr::mutate(lat = as.numeric(.data[[lat_col]]), lon = as.numeric(.data[[lon_col]])) %>%
-      dplyr::filter(lat <= 90, lat >= -90, lon <= 180, lon >= -180)
-    
-    # Filter correlation data by selected year
-    year_sel <- input$timeline_year
-    corr_year <- corr %>% dplyr::filter(year == year_sel)
-    
-    # Ensure a common 'station' key exists in stations data
-    if (!"station" %in% names(st2) && "name" %in% names(st2)) {
-      st2 <- dplyr::rename(st2, station = name)
-    }
-    # Build robust join keys based on available columns
-    join_keys <- c("station" = "station")
-    if ("region" %in% names(st2) && "region" %in% names(corr_year)) join_keys <- c(join_keys, "region" = "region")
-    if ("country" %in% names(st2) && "country" %in% names(corr_year)) join_keys <- c(join_keys, "country" = "country")
-    # Join with stations
-    map_data <- st2 %>% dplyr::left_join(corr_year, by = join_keys)
-    
-    req(nrow(map_data) > 0)
-    
-    # Scale circle size by registered women
-    map_data <- map_data %>%
-      dplyr::mutate(
-        circle_size = sqrt(pmax(total_avg_registered, 0, na.rm = TRUE)) * 2,
-        circle_size = ifelse(is.na(circle_size) | circle_size == 0, 3, pmin(circle_size, 20)),
-        punishment_color = dplyr::case_when(
-          is.na(punishment_rate) ~ '#cccccc',
-          punishment_rate > 20 ~ '#d62728',
-          punishment_rate > 10 ~ '#ff7f0e',
-          punishment_rate > 5 ~ '#ffbb78',
-          TRUE ~ '#c7e9b4'
-        ),
-        popup_text = paste0(
-          "<b>", station, "</b><br>",
-          "Year: ", year_sel, "<br>",
-          "Region: ", ifelse(is.na(region), "Unknown", region), "<br>",
-          "Registered Women: ", ifelse(is.na(total_avg_registered), "No data", round(total_avg_registered, 0)), "<br>",
-          "Punishment Rate: ", ifelse(is.na(punishment_rate), "No data", paste0(round(punishment_rate, 1), "%")), "<br>",
-          "Surveillance Index: ", ifelse(is.na(surveillance_index), "No data", round(surveillance_index, 1))
-        )
-      )
-    
-    leafletProxy("animated_timeline_map", data = map_data) %>%
-      clearMarkers() %>%
-      addCircleMarkers(
-        ~lon, ~lat, 
-        radius = ~circle_size,
-        color = ~punishment_color,
-        fillOpacity = 0.7,
-        stroke = TRUE,
-        weight = 1,
-        popup = ~popup_text,
-        layerId = ~station
-      )
-  })
   
-  output$timeline_year_metrics <- renderPlotly({
-    corr <- correlation_data()
-    validate(need(nrow(corr) > 0, "No correlation data available"))
-    
-    yearly_totals <- corr %>%
-      dplyr::group_by(year) %>%
-      dplyr::summarise(
-        total_registered = sum(total_avg_registered, na.rm = TRUE),
-        total_fined = sum(total_fined, na.rm = TRUE),
-        total_imprisoned = sum(total_imprisoned, na.rm = TRUE),
-        .groups = 'drop'
-      )
-    
-    validate(need(nrow(yearly_totals) > 0, "No yearly data"))
-    
-    p <- plot_ly(yearly_totals, x = ~year) %>%
-      add_trace(y = ~total_registered, name = 'Registered Women', type = 'bar', marker = list(color = '#3498db')) %>%
-      add_trace(y = ~total_fined, name = 'Fined', type = 'bar', marker = list(color = '#f39c12')) %>%
-      add_trace(y = ~total_imprisoned, name = 'Imprisoned', type = 'bar', marker = list(color = '#e74c3c')) %>%
-      layout(
-        title = 'Year-over-Year Surveillance and Punishment',
-        xaxis = list(title = 'Year'),
-        yaxis = list(title = 'Count'),
-        barmode = 'group'
-      )
-    p
-  })
-  
-  # ---------------------
-  # Disease Prevalence Map Outputs
-  # ---------------------
-  # Initial map render
-  output$disease_prevalence_map <- renderLeaflet({
-    leaflet() %>% 
-      addTiles() %>%
-      setView(lng = 78.9629, lat = 20.5937, zoom = 5)  # Center on India
-  })
-  
-  # Update markers when metric selector changes
-  observe({
-    st <- stations_df()
-    corr <- correlation_data()
-    
-    req(nrow(st) > 0, nrow(corr) > 0, input$disease_map_metric)
-    
-    # Detect lat/lon columns
-    lat_col <- 'latitude'; lon_col <- 'longitude'
-    if (all(c('lat','lon') %in% names(st))) { lat_col <- 'lat'; lon_col <- 'lon' }
-    if (all(c('lat','lng') %in% names(st))) { lat_col <- 'lat'; lon_col <- 'lng' }
-    
-    st2 <- st %>% 
-      dplyr::filter(!is.na(.data[[lat_col]]), !is.na(.data[[lon_col]])) %>%
-      dplyr::mutate(lat = as.numeric(.data[[lat_col]]), lon = as.numeric(.data[[lon_col]])) %>%
-      dplyr::filter(lat <= 90, lat >= -90, lon <= 180, lon >= -180)
-    
-    # Aggregate disease data by station (across all years)
-    disease_by_station <- corr %>%
-      dplyr::group_by(station, region, country) %>%
-      dplyr::summarise(
-        total_diseases = sum(total_diseases, na.rm = TRUE),
-        primary_syphilis_rate = mean(primary_syphilis_rate, na.rm = TRUE),
-        secondary_syphilis_rate = mean(secondary_syphilis_rate, na.rm = TRUE),
-        gonorrhoea_rate = mean(gonorrhoea_rate, na.rm = TRUE),
-        troop_vd_rate = mean(troop_vd_rate, na.rm = TRUE),
-        .groups = 'drop'
-      )
-    
-    # Ensure a common 'station' key exists in stations data
-    if (!"station" %in% names(st2) && "name" %in% names(st2)) {
-      st2 <- dplyr::rename(st2, station = name)
-    }
-    # Build robust join keys based on available columns
-    join_keys <- c("station" = "station")
-    if ("region" %in% names(st2) && "region" %in% names(disease_by_station)) join_keys <- c(join_keys, "region" = "region")
-    if ("country" %in% names(st2) && "country" %in% names(disease_by_station)) join_keys <- c(join_keys, "country" = "country")
-    # Join with stations
-    map_data <- st2 %>% dplyr::left_join(disease_by_station, by = join_keys)
-    
-    req(nrow(map_data) > 0)
-    
-    # Color by selected metric
-    metric <- input$disease_map_metric
-    
-    map_data <- map_data %>%
-      dplyr::mutate(
-        metric_value = .data[[metric]],
-        popup_text = paste0(
-          "<b>", station, "</b><br>",
-          "Region: ", ifelse(is.na(region), "Unknown", region), "<br>",
-          "Total Diseases: ", ifelse(is.na(total_diseases), "No data", round(total_diseases, 0)), "<br>",
-          "Primary Syphilis Rate: ", ifelse(is.na(primary_syphilis_rate), "No data", paste0(round(primary_syphilis_rate, 1), "%")), "<br>",
-          "Secondary Syphilis Rate: ", ifelse(is.na(secondary_syphilis_rate), "No data", paste0(round(secondary_syphilis_rate, 1), "%")), "<br>",
-          "Gonorrhoea Rate: ", ifelse(is.na(gonorrhoea_rate), "No data", paste0(round(gonorrhoea_rate, 1), "%")), "<br>",
-          "Troop VD Rate: ", ifelse(is.na(troop_vd_rate), "No data", paste0(round(troop_vd_rate, 1), "%"))
-        )
-      )
-    
-    # Create color palette
-    pal <- colorNumeric(palette = "YlOrRd", domain = map_data$metric_value, na.color = "#cccccc")
-    
-    leafletProxy("disease_prevalence_map", data = map_data) %>%
-      clearMarkers() %>%
-      clearControls() %>%
-      addCircleMarkers(
-        ~lon, ~lat, 
-        radius = 8,
-        color = ~pal(metric_value),
-        fillOpacity = 0.8,
-        stroke = TRUE,
-        weight = 1,
-        popup = ~popup_text,
-        layerId = ~station
-      ) %>%
-      addLegend(
-        position = "bottomright",
-        pal = pal,
-        values = ~metric_value,
-        title = "Disease Metric",
-        opacity = 0.8,
-        layerId = "disease_legend"
-      )
-  })
-  
-  output$disease_comparison_women <- renderPlotly({
-    corr <- correlation_data()
-    validate(need(nrow(corr) > 0, "No correlation data available"))
-    
-    disease_totals <- corr %>%
-      dplyr::summarise(
-        `Primary Syphilis` = sum(primary_syphilis_women, na.rm = TRUE),
-        `Secondary Syphilis` = sum(secondary_syphilis_women, na.rm = TRUE),
-        Gonorrhoea = sum(gonorrhoea_women, na.rm = TRUE),
-        Leucorrhoea = sum(leucorrhoea_women, na.rm = TRUE)
-      ) %>%
-      tidyr::pivot_longer(everything(), names_to = "Disease", values_to = "Cases")
-    
-    plot_ly(disease_totals, labels = ~Disease, values = ~Cases, type = 'pie',
-            textinfo = 'label+percent',
-            marker = list(colors = c('#e74c3c', '#c0392b', '#e67e22', '#f39c12'))) %>%
-      layout(title = 'Disease Distribution in Women')
-  })
-  
-  output$disease_comparison_troops <- renderPlotly({
-    corr <- correlation_data()
-    validate(need(nrow(corr) > 0, "No correlation data available"))
-    
-    disease_totals <- corr %>%
-      dplyr::summarise(
-        `Primary Syphilis` = sum(primary_syphilis_troops, na.rm = TRUE),
-        `Secondary Syphilis` = sum(secondary_syphilis_troops, na.rm = TRUE),
-        Gonorrhoea = sum(gonorrhoea_troops, na.rm = TRUE)
-      ) %>%
-      tidyr::pivot_longer(everything(), names_to = "Disease", values_to = "Cases")
-    
-    plot_ly(disease_totals, labels = ~Disease, values = ~Cases, type = 'pie',
-            textinfo = 'label+percent',
-            marker = list(colors = c('#3498db', '#2980b9', '#1abc9c'))) %>%
-      layout(title = 'VD Distribution in Troops')
-  })
   
   # =====================
   # Hospital Operations Visualizations
   # =====================
   
   # Debug info
-  output$ops_debug_info <- renderText({
-    ops <- hospital_ops_enriched()
-    paste0(
-      "Hospital Operations Data Status:\n",
-      "Total rows: ", nrow(ops), "\n",
-      if (nrow(ops) > 0) {
-        paste0(
-          "Columns: ", paste(names(ops), collapse = ", "), "\n",
-          "With inspection_freq_norm: ", sum(!is.na(ops$inspection_freq_norm)), "\n",
-          "With unlicensed_control_norm: ", sum(!is.na(ops$unlicensed_control_norm)), "\n",
-          "With committee_supervision_norm: ", sum(!is.na(ops$committee_supervision_norm)), "\n",
-          "With absentees_punished: ", sum(!is.na(ops$absentees_punished)), "\n",
-          "Sample years: ", paste(head(sort(unique(ops$year)), 5), collapse = ", ")
-        )
-      } else {
-        "No data available - check console messages for details."
-      }
-    )
-  })
   
   # Inspection Frequency Timeline
-  output$ops_inspection_timeline <- renderPlotly({
-    ops <- hospital_ops_enriched()
-    validate(need(nrow(ops) > 0, "No hospital operations data available"))
-    
-    timeline <- ops %>%
-      dplyr::filter(!is.na(inspection_freq_norm)) %>%
-      dplyr::group_by(year, inspection_freq_norm) %>%
-      dplyr::summarise(count = dplyr::n(), .groups = 'drop') %>%
-      dplyr::arrange(year)
-    
-    validate(need(nrow(timeline) > 0, "No inspection frequency data"))
-    
-    plot_ly(timeline, x = ~year, y = ~count, color = ~inspection_freq_norm, type = 'scatter', mode = 'lines+markers',
-            colors = c("Weekly" = "#27ae60", "Daily" = "#16a085", "Fortnightly" = "#f39c12", 
-                       "Monthly" = "#e67e22", "Irregular" = "#e74c3c", "Other" = "#95a5a6")) %>%
-      layout(title = 'Inspection Frequency Over Time',
-             xaxis = list(title = 'Year'),
-             yaxis = list(title = 'Number of Stations'),
-             legend = list(orientation = 'h'))
-  })
   
   # Inspection Frequency by Region
-  output$ops_inspection_by_region <- renderPlotly({
-    ops <- hospital_ops_enriched()
-    validate(need(nrow(ops) > 0, "No hospital operations data available"))
-    
-    by_region <- ops %>%
-      dplyr::filter(!is.na(inspection_freq_norm), !is.na(region)) %>%
-      dplyr::group_by(region, inspection_freq_norm) %>%
-      dplyr::summarise(count = dplyr::n(), .groups = 'drop')
-    
-    validate(need(nrow(by_region) > 0, "No regional inspection data"))
-    
-    plot_ly(by_region, x = ~region, y = ~count, color = ~inspection_freq_norm, type = 'bar',
-            colors = c("Weekly" = "#27ae60", "Daily" = "#16a085", "Fortnightly" = "#f39c12", 
-                       "Monthly" = "#e67e22", "Irregular" = "#e74c3c", "Other" = "#95a5a6")) %>%
-      layout(title = 'Inspection Regimes by Region',
-             xaxis = list(title = 'Region'),
-             yaxis = list(title = 'Number of Records'),
-             barmode = 'stack',
-             legend = list(orientation = 'h'))
-  })
   
   # Unlicensed Control Methods Distribution
-  output$ops_unlicensed_methods <- renderPlotly({
-    ops <- hospital_ops_enriched()
-    validate(need(nrow(ops) > 0, "No hospital operations data available"))
-    
-    methods <- ops %>%
-      dplyr::filter(!is.na(unlicensed_control_norm)) %>%
-      dplyr::group_by(unlicensed_control_norm) %>%
-      dplyr::summarise(count = dplyr::n(), .groups = 'drop') %>%
-      dplyr::arrange(desc(count))
-    
-    validate(need(nrow(methods) > 0, "No unlicensed control data"))
-    
-    plot_ly(methods, x = ~reorder(unlicensed_control_norm, count), y = ~count, type = 'bar',
-            marker = list(color = '#e74c3c')) %>%
-      layout(title = 'Methods for Controlling Unlicensed Women',
-             xaxis = list(title = ''),
-             yaxis = list(title = 'Number of Records'))
-  })
   
   # Unlicensed Control by Act
-  output$ops_unlicensed_by_act <- renderPlotly({
-    ops <- hospital_ops_enriched()
-    validate(need(nrow(ops) > 0, "No hospital operations data available"))
-    
-    by_act <- ops %>%
-      dplyr::filter(!is.na(unlicensed_control_norm), !is.na(act)) %>%
-      dplyr::group_by(act, unlicensed_control_norm) %>%
-      dplyr::summarise(count = dplyr::n(), .groups = 'drop')
-    
-    validate(need(nrow(by_act) > 0, "No Act-specific unlicensed control data"))
-    
-    plot_ly(by_act, x = ~act, y = ~count, color = ~unlicensed_control_norm, type = 'bar',
-            colors = c("Police Action" = "#e74c3c", "Special Constables" = "#f39c12", "Other Methods" = "#95a5a6")) %>%
-      layout(title = 'Unlicensed Control Methods by Act',
-             xaxis = list(title = 'Act'),
-             yaxis = list(title = 'Number of Records'),
-             barmode = 'stack',
-             legend = list(orientation = 'h'))
-  })
   
   # Committee Oversight Distribution
-  output$ops_committee_distribution <- renderPlotly({
-    ops <- hospital_ops_enriched()
-    validate(need(nrow(ops) > 0, "No hospital operations data available"))
-    
-    oversight <- ops %>%
-      dplyr::filter(!is.na(committee_supervision_norm)) %>%
-      dplyr::group_by(committee_supervision_norm) %>%
-      dplyr::summarise(count = dplyr::n(), .groups = 'drop') %>%
-      dplyr::arrange(desc(count))
-    
-    validate(need(nrow(oversight) > 0, "No committee oversight data"))
-    
-    plot_ly(oversight, labels = ~committee_supervision_norm, values = ~count, type = 'pie',
-            textinfo = 'label+percent',
-            marker = list(colors = c('#3498db', '#2ecc71', '#f39c12', '#e67e22', '#9b59b6', '#95a5a6'))) %>%
-      layout(title = 'Administrative Oversight Structure')
-  })
   
   # Committee Oversight by Region
-  output$ops_committee_by_region <- renderPlotly({
-    ops <- hospital_ops_enriched()
-    validate(need(nrow(ops) > 0, "No hospital operations data available"))
-    
-    by_region <- ops %>%
-      dplyr::filter(!is.na(committee_supervision_norm), !is.na(region)) %>%
-      dplyr::group_by(region, committee_supervision_norm) %>%
-      dplyr::summarise(count = dplyr::n(), .groups = 'drop')
-    
-    validate(need(nrow(by_region) > 0, "No regional committee data"))
-    
-    plot_ly(by_region, x = ~region, y = ~count, color = ~committee_supervision_norm, type = 'bar',
-            colors = c("Magistrate Oversight" = "#3498db", "Committee" = "#2ecc71", 
-                       "Regular Subcommittee" = "#f39c12", "Irregular Subcommittee" = "#e67e22",
-                       "Subcommittee" = "#9b59b6", "Other" = "#95a5a6")) %>%
-      layout(title = 'Oversight Structure by Region',
-             xaxis = list(title = 'Region'),
-             yaxis = list(title = 'Number of Records'),
-             barmode = 'stack',
-             legend = list(orientation = 'h'))
-  })
   
   # Punishment Timeline (Absentees Punished)
-  output$ops_punishment_timeline <- renderPlotly({
-    ops <- hospital_ops_enriched()
-    validate(need(nrow(ops) > 0, "No hospital operations data available"))
-    
-    punishment <- ops %>%
-      dplyr::filter(!is.na(absentees_punished)) %>%
-      dplyr::group_by(year) %>%
-      dplyr::summarise(
-        total_punished = sum(absentees_punished, na.rm = TRUE),
-        avg_punished = mean(absentees_punished, na.rm = TRUE),
-        stations = dplyr::n(),
-        .groups = 'drop'
-      ) %>%
-      dplyr::arrange(year)
-    
-    validate(need(nrow(punishment) > 0, "No punishment data extracted"))
-    
-    plot_ly(punishment, x = ~year) %>%
-      add_trace(y = ~total_punished, name = 'Total Absentees Punished', type = 'scatter', mode = 'lines+markers',
-                line = list(color = '#e74c3c', width = 2), marker = list(size = 8)) %>%
-      add_trace(y = ~avg_punished, name = 'Average per Station', type = 'scatter', mode = 'lines',
-                line = list(color = '#f39c12', dash = 'dot', width = 2), yaxis = 'y2') %>%
-      layout(title = 'Absentee Punishments Over Time (Resistance Indicator)',
-             xaxis = list(title = 'Year'),
-             yaxis = list(title = 'Total Punished'),
-             yaxis2 = list(title = 'Average per Station', overlaying = 'y', side = 'right'),
-             legend = list(orientation = 'h'))
-  })
   
   # Punishment by Station (Top 15)
-  output$ops_punishment_by_station <- renderPlotly({
-    ops <- hospital_ops_enriched()
-    validate(need(nrow(ops) > 0, "No hospital operations data available"))
-    
-    by_station <- ops %>%
-      dplyr::filter(!is.na(absentees_punished)) %>%
-      dplyr::group_by(station, region) %>%
-      dplyr::summarise(total_punished = sum(absentees_punished, na.rm = TRUE), .groups = 'drop') %>%
-      dplyr::arrange(desc(total_punished)) %>%
-      dplyr::slice_head(n = 15)
-    
-    validate(need(nrow(by_station) > 0, "No station-level punishment data"))
-    
-    plot_ly(by_station, x = ~reorder(station, total_punished), y = ~total_punished, type = 'bar',
-            marker = list(color = '#e74c3c'), text = ~region, hovertemplate = '%{x}<br>%{y} punished<br>Region: %{text}') %>%
-      layout(title = 'Top 15 Stations by Absentee Punishments',
-             xaxis = list(title = ''),
-             yaxis = list(title = 'Total Absentees Punished')) %>%
-      add_annotations(text = '(Proxy for resistance intensity)', xref = 'paper', yref = 'paper',
-                     x = 0.5, y = 1.1, showarrow = FALSE, font = list(size = 11, color = '#7f8c8d'))
-  })
   
   # (Removed) Administrative Intensity Map and status outputs at user's request
 
   # Staff role mentions (proxy) over time - simplified to use hospital ops directly
-  output$ops_staff_mentions_timeline <- renderPlotly({
-    tryCatch({
-      ops <- hospital_ops_enriched()
-      validate(need(nrow(ops) > 0, "No hospital operations data available"))
-      
-      # Check if staff mention columns exist
-      if (!all(c("staff_male_mentions", "staff_female_mentions") %in% names(ops))) {
-        return(plotly::plot_ly() %>% plotly::layout(
-          title = "Staff mentions columns not found",
-          annotations = list(x = 0.5, y = 0.5, text = "Missing staff_male_mentions or staff_female_mentions columns", showarrow = FALSE)
-        ))
-      }
-      
-      # Aggregate by year
-      by_year <- ops %>%
-        dplyr::filter(!is.na(year)) %>%
-        dplyr::group_by(year) %>%
-        dplyr::summarise(
-          male = sum(staff_male_mentions, na.rm = TRUE),
-          female = sum(staff_female_mentions, na.rm = TRUE),
-          .groups = 'drop'
-        ) %>% 
-        dplyr::arrange(year)
-      
-      # Check if we have any mentions
-      total_mentions <- sum(by_year$male, na.rm = TRUE) + sum(by_year$female, na.rm = TRUE)
-      if (total_mentions == 0) {
-        return(plotly::plot_ly() %>% plotly::layout(
-          title = "No staff mentions found in notes",
-          annotations = list(
-            x = 0.5, y = 0.5, 
-            text = paste0("Total rows: ", nrow(ops), " | Years: ", nrow(by_year), "<br>No role keywords (surgeon, matron, etc.) found in hospital operation notes"), 
-            showarrow = FALSE
-          )
-        ))
-      }
-      
-      validate(need(nrow(by_year) > 0, "No staff mentions found in notes after grouping by year"))
-      
-      # Create plot
-      plot_ly(by_year, x = ~year) %>%
-        add_trace(y = ~male, name = 'Male-coded roles', type = 'scatter', mode = 'lines+markers', 
-                  line = list(color = '#2c3e50'), marker = list(size = 8)) %>%
-        add_trace(y = ~female, name = 'Female-coded roles', type = 'scatter', mode = 'lines+markers', 
-                  line = list(color = '#9b59b6'), marker = list(size = 8)) %>%
-        layout(
-          title = 'Staff Role Mentions Over Time (from hospital notes)',
-          xaxis = list(title = 'Year'),
-          yaxis = list(title = 'Mentions'),
-          legend = list(orientation = 'h'),
-          hovermode = 'x unified'
-        )
-    }, error = function(e) {
-      plotly::plot_ly() %>% plotly::layout(
-        title = "Error rendering timeline",
-        annotations = list(x = 0.5, y = 0.5, text = paste0("Error: ", e$message), showarrow = FALSE)
-      )
-    })
-  })
 
   # Staff role mentions by region - simplified to use hospital ops directly
-  output$ops_staff_mentions_by_region <- renderPlotly({
-    tryCatch({
-      ops <- hospital_ops_enriched()
-      validate(need(nrow(ops) > 0, "No hospital operations data available"))
-      
-      # Check if staff mention columns exist
-      if (!all(c("staff_male_mentions", "staff_female_mentions", "region") %in% names(ops))) {
-        return(plotly::plot_ly() %>% plotly::layout(
-          title = "Required columns not found",
-          annotations = list(x = 0.5, y = 0.5, text = "Missing staff mention or region columns", showarrow = FALSE)
-        ))
-      }
-      
-      # Aggregate by region
-      by_region <- ops %>%
-        dplyr::filter(!is.na(region)) %>%
-        dplyr::group_by(region) %>%
-        dplyr::summarise(
-          male = sum(staff_male_mentions, na.rm = TRUE),
-          female = sum(staff_female_mentions, na.rm = TRUE),
-          .groups = 'drop'
-        ) %>%
-        tidyr::pivot_longer(cols = c(male, female), names_to = 'role', values_to = 'mentions')
-      
-      # Check if we have any mentions
-      total_mentions <- sum(by_region$mentions, na.rm = TRUE)
-      if (total_mentions == 0) {
-        return(plotly::plot_ly() %>% plotly::layout(
-          title = "No staff mentions found by region",
-          annotations = list(
-            x = 0.5, y = 0.5,
-            text = paste0("Total rows: ", nrow(ops), " | Regions: ", length(unique(ops$region)), "<br>No role keywords found in notes"),
-            showarrow = FALSE
-          )
-        ))
-      }
-      
-      validate(need(nrow(by_region) > 0, "No staff mentions by region"))
-      
-      # Create plot
-      plot_ly(by_region, x = ~region, y = ~mentions, color = ~role, type = 'bar', 
-              colors = c('male' = '#2c3e50', 'female' = '#9b59b6')) %>%
-        layout(
-          title = 'Staff Role Mentions by Region (from hospital notes)',
-          xaxis = list(title = 'Region'),
-          yaxis = list(title = 'Mentions'),
-          barmode = 'group',
-          legend = list(orientation = 'h')
-        )
-    }, error = function(e) {
-      plotly::plot_ly() %>% plotly::layout(
-        title = "Error rendering by-region chart",
-        annotations = list(x = 0.5, y = 0.5, text = paste0("Error: ", e$message), showarrow = FALSE)
-      )
-    })
-  })
   
   observeEvent(input$export_query, {
     query <- input$custom_query
