@@ -335,6 +335,23 @@ ui <- dashboardPage(
             collapsed = TRUE,
             DT::dataTableOutput("railway_stations_table")
           )
+        ),
+        # Overlap Analysis Visualization
+        fluidRow(
+          box(
+            title = "Railway-Hospital Proximity Analysis",
+            status = "primary",
+            solidHeader = TRUE,
+            width = 12,
+            collapsible = TRUE,
+            collapsed = FALSE,
+            h4("Mapping of Railway Stations and Lock Hospitals"),
+            p("This map shows the spatial relationship between railway infrastructure and medical surveillance sites."),
+            leafletOutput("overlap_map", height = "500px"),
+            hr(),
+            h4("Closest Railway Stations to Each Hospital"),
+            DT::dataTableOutput("proximity_table")
+          )
         )
       ),
       
@@ -990,6 +1007,155 @@ server <- function(input, output, session) {
         pageLength = 10,
         scrollX = FALSE,
         dom = 'ftip'
+      ),
+      rownames = FALSE
+    )
+  })
+  
+  # ===== OVERLAP ANALYSIS VISUALIZATION =====
+  
+  # Overlap Map: Show only railway stations and hospitals with lock hospital data
+  output$overlap_map <- renderLeaflet({
+    # Get stations with hospital data
+    hospitals <- stations_df() %>%
+      dplyr::inner_join(
+        women_df() %>% dplyr::select(station, year) %>% dplyr::distinct(),
+        by = c("name" = "station")
+      ) %>%
+      dplyr::distinct(name, .keep_all = TRUE)
+    
+    # Create base map
+    m <- leaflet() %>%
+      addTiles() %>%
+      setView(lng = 78.9629, lat = 20.5937, zoom = 5)
+    
+    # Add hospitals (blue)
+    if (nrow(hospitals) > 0) {
+      m <- m %>%
+        addCircleMarkers(
+          data = hospitals,
+          lng = ~longitude, lat = ~latitude,
+          radius = 8,
+          color = "#3498db",
+          fillColor = "#3498db",
+          fillOpacity = 0.7,
+          weight = 2,
+          popup = ~paste0("<b>Hospital: ", name, "</b><br>",
+                         "Region: ", region, "<br>",
+                         "Type: Lock Hospital"),
+          group = "Hospitals",
+          label = ~name
+        )
+    }
+    
+    # Add railway stations (orange)
+    if (!is.null(railway_stations) && nrow(railway_stations) > 0) {
+      m <- m %>%
+        addCircleMarkers(
+          data = railway_stations,
+          lng = ~lon, lat = ~lat,
+          radius = 6,
+          color = "#e67e22",
+          fillColor = "#e67e22",
+          fillOpacity = 0.6,
+          weight = 2,
+          popup = ~paste0("<b>Railway: ", orig_name, "</b><br>",
+                         "Modern: ", modern_nam),
+          group = "Railways",
+          label = ~orig_name
+        )
+    }
+    
+    # Add legend
+    m <- m %>%
+      addLegend(
+        position = "bottomright",
+        colors = c("#3498db", "#e67e22"),
+        labels = c("Lock Hospitals", "Railway Stations"),
+        title = "Site Type",
+        opacity = 0.7
+      )
+    
+    m
+  })
+  
+  # Calculate proximity distances
+  proximity_data <- reactive({
+    hospitals <- stations_df() %>%
+      dplyr::inner_join(
+        women_df() %>% dplyr::select(station, year) %>% dplyr::distinct(),
+        by = c("name" = "station")
+      ) %>%
+      dplyr::distinct(name, .keep_all = TRUE)
+    
+    if (is.null(railway_stations) || nrow(railway_stations) == 0 || nrow(hospitals) == 0) {
+      return(data.frame())
+    }
+    
+    # Calculate distance from each hospital to nearest railway station
+    results <- lapply(1:nrow(hospitals), function(i) {
+      h <- hospitals[i, ]
+      
+      # Calculate distances to all railway stations
+      distances <- sapply(1:nrow(railway_stations), function(j) {
+        r <- railway_stations[j, ]
+        # Haversine distance in km
+        lat1 <- h$latitude * pi / 180
+        lon1 <- h$longitude * pi / 180
+        lat2 <- r$lat * pi / 180
+        lon2 <- r$lon * pi / 180
+        
+        dlat <- lat2 - lat1
+        dlon <- lon2 - lon1
+        
+        a <- sin(dlat/2)^2 + cos(lat1) * cos(lat2) * sin(dlon/2)^2
+        c <- 2 * atan2(sqrt(a), sqrt(1-a))
+        6371 * c  # Earth radius in km
+      })
+      
+      # Find nearest station
+      nearest_idx <- which.min(distances)
+      
+      data.frame(
+        hospital = h$name,
+        region = h$region,
+        nearest_railway = railway_stations$orig_name[nearest_idx],
+        distance_km = round(distances[nearest_idx], 1),
+        stringsAsFactors = FALSE
+      )
+    })
+    
+    do.call(rbind, results) %>%
+      dplyr::arrange(distance_km)
+  })
+  
+  # Proximity table
+  output$proximity_table <- DT::renderDataTable({
+    data <- proximity_data()
+    
+    if (nrow(data) == 0) {
+      return(DT::datatable(data.frame(Message = "No proximity data available")))
+    }
+    
+    display_data <- data %>%
+      dplyr::select(
+        `Hospital` = hospital,
+        `Region` = region,
+        `Nearest Railway Station` = nearest_railway,
+        `Distance (km)` = distance_km
+      )
+    
+    DT::datatable(
+      display_data,
+      options = list(
+        pageLength = 5,
+        scrollX = FALSE,
+        dom = 't',
+        initComplete = JS(
+          "function(settings, json) {",
+          "$(this.api().table().header()).css({'background-color': '#f39c12', 'color': '#fff'});",
+          "}"
+        )
       ),
       rownames = FALSE
     )
