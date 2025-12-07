@@ -194,7 +194,7 @@ The Story tab presents a guided narrative journey through the Lock Hospital arch
 
 ---
 
-### 🗺️ Interactive Map Tab
+### Interactive Map Tab
 
 The Interactive Map tab is the primary analytical interface, enabling year-by-year exploration of Lock Hospital operations and their relationship to colonial infrastructure.
 
