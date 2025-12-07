@@ -1,10 +1,31 @@
-# Medical Lock Hospitals
-A comprehensive R Shiny application for visualizing and analyzing historical data on Lock Hospitals in British India and Burma (1873-1889). This digital humanities research tool provides interactive maps and qualitative data exploration of colonial medical surveillance systems.
+# Governing Diseases and Sexuality in Colonial India
+An interactive R Shiny application for exploring the Lock Hospital system in British India and Burma. This digital humanities project reconstructs how colonial medical surveillance transformed women's bodies into administrative categories through the Contagious Diseases Acts.
 
-## About the Project
+## About this Project
 
-This digital humanities research infrastructure was developed to analyze the implementation of Contagious Diseases Acts in British India and Burma. The Lock Hospital system was a colonial mechanism for surveilling and controlling women, ostensibly to prevent venereal disease transmission to British troops.
-The database includes:
+This digital humanities research infrastructure was developed to analyze the implementation of Contagious Diseases Acts in British India and Burma. The Lock Hospital system was a colonial mechanism for surveilling and controlling women, to prevent venereal disease transmission to British troops. By breaking the data down into 6 distinct digital datasets for different groups (women, men, hospitals, stations, documents and station reports), this digital project treats these materials as sets of different knowledge systems that overlap and interact with each other in complicated ways, linking up the big imperial structures that Levine writes about, the legal and gendered dimensions that Tambe explores, and the military anxieties that Wald looks at. This project brings together digital reconstruction and feminist history to show how the colonial state's methods of keeping tabs on people didn't just record how they governed sex and disease - they actually made it happen.
+
+## The Archive
+
+The work began with the manual extraction of tables and theoretical narrative notes from the annual lock-hospital and sanitary reports between 1870 and 1890. These reports came from six major regions: Punjab, the North-Western Provinces and Oudh, the Madras Presidency, Burma (both civil and military divisions), the Central Provinces, and the British Burma Division. Each report followed a consistent format - one section presented numbers of women registered, inspected, fined, or imprisoned; another listed venereal admissions among European and Indian troops; a third summarized committee activity and administrative remarks.
+
+## Technical Infrastructure
+Tools and Workflow
+Python → R → Shiny Application
+
+Python Workflow
+Parsing: Reading CSV files, handling encoding issues and irregular delimiters
+Validation: Checking duplicates, impossible values, referential integrity
+Standardization: Normalizing names and categories using historical sources
+Geocoding: Looking up coordinates with manual verification
+Import: Writing to SQLite with schema constraints and indexes
+R Workflow
+Querying: Using DBI and dplyr to extract data subsets
+Transformation: Calculating punishment rates, surveillance intensity, temporal trends
+Visualization: Creating plots with ggplot2, interactive maps with plotly and leaflet
+Application: Building Shiny dashboard with multiple analytical lenses
+
+## Database structure:
 
 - **332 station-year records** across **56 unique Lock Hospital stations**
 - **Women's admission data** (registration, diseases, punishments)
@@ -42,14 +63,6 @@ The application works with seven main tables:
 5. **troops** - Military venereal disease data (300 records)
 6. **hospital_operations** - Legal regimes and Acts in force by station-year
 7. **hospital_notes** - 362 qualitative inspection reports with textual analysis
-
-### Data Coverage Summary
-
-- **Temporal range**: 1873-1889 (17 years)
-- **Geographic scope**: 56 unique Lock Hospital stations across British India and Burma
-- **Peak surveillance**: 1880-1882 (26-27 stations reporting)
-- **Initial deployment**: 1873 (6 Burma stations: Rangoon, Moulmein, Bassein, Tonghoo, Thayetmyo, Mandalay)
-- **Regional distribution**: Burma, Punjab, Madras, Bengal, Bombay, Central India, Northwestern Provinces
 
 
 ### Tables and Columns
@@ -145,167 +158,107 @@ The application works with seven main tables:
    - period_of_occupation (TEXT): Narrative (e.g., “Whole year”)
 
 
-### Keys and Joins
+## Features & Visualizations
 
-- documents joined by doc_id to: hospital_operations, hospital_notes, women_admission, troops, station_reports
-- stations joined by station_id to: station_reports; joined by name (TEXT) to: hospital_operations, women_admission, troops
-- hospital_operations joined to hospital_notes by hid
+###  Story Tab: Scrollytelling Narrative
 
-### Controlled Vocabularies and Values
+The Story tab presents a guided narrative journey through the Lock Hospital archive, combining text, data, and visuals to contextualize the colonial medical surveillance system.
 
-- act (hospital_operations.act)
-   - Act XXII of 1864, Act XIV of 1868, Act III of 1880, Act XII of 1864, Voluntary System
-- inspection_freq (hospital_notes)
-   - weekly, monthly, fortnightly, daily, regular, irregular
-- unlicensed_control_type (hospital_notes)
-   - police_action, special_constables, other
-- committee_supervision (hospital_notes)
-   - magistrate_oversight, committee, subcommittee_regular, subcommittee_irregular
+#### 1. Overview Map with Acts Filter
+- **Interactive Leaflet map** showing all Lock Hospital stations across British India and Burma
+- **Filterable by Contagious Diseases Acts**:
+  - Act XXII of 1864 (Cantonment Act)
+  - Act XIV of 1868 (Contagious Diseases Act)
+  - Act III of 1880 (Cantonment Act)
+  - Cantonment Act 1889
+  - Voluntary System
+  - No Act / Unknown
+- **Geographic visualization** of how different legal regimes shaped surveillance across regions
+- Hover over stations to see which Acts were in force
 
-
-**Fixes:**
-- "Moulmein": Corrected from Mumbai (18.98°, 72.83°) to Burma (16.49°, 97.63°)
-- "Bassein": Corrected from Mumbai/Vasai (19.38°, 72.83°) to Pathein, Burma (16.78°, 94.73°)
-- "Peshawar": Corrected from Hyderabad (17.40°, 78.46°) to Pakistan/Punjab frontier (34.02°, 71.52°)
-- "Nagpur and Kamptee": Coordinates verified as correct in Central India
-- "Sitabaldi" and "Seetabuldee" unified to "Nagpur" with proper coordinates
-- "India (British Burma)" consolidated to "Rangoon" (standardized in October 2025)
-
-### Interpretation Notes
-
-- “avg_registered” in women_admission is a source-derived average (often monthly) and may be used as a proxy for surveillance intensity; it is not an instantaneous headcount
-- “non_attendance_cases”, “fined_count”, and “imprisonment_count” document the coercive apparatus around registration and inspection
-- Troop disease measures and women registration flows can be compared at the station-year level to analyze the military-medical nexus
-
-## Installation & Setup
-
-### Prerequisites
-- R (version 4.0 or higher recommended)
-- RStudio (recommended for development)
-- The `medical_lock_hospitals.db` SQLite database file (included in repository)
-
-### Quick Start
-
-1. **Clone or download this repository**
-
-2. **Install R packages**:
-   ```bash
-   Rscript install_packages.R
-   ```
-
-3. **Run the application**:
-   ```bash
-   Rscript run_app.R
-   ```
-   
-   Or from R console:
-   ```r
-   source("run_app.R")
-   ```
-
-4. **Access the app**: Open your web browser to `http://127.0.0.1:8891`
-
-The app will launch in SAFE_MODE by default, which prevents accidental data modifications.
-
-### Manual Installation
-
-If you prefer to install packages manually:
-
-```r
-# Install required packages
-install.packages(c(
-  "shiny", "shinydashboard", "shinyWidgets",
-  "DBI", "RSQLite", "dplyr", "ggplot2", 
-  "plotly", "DT", "writexl", "jsonlite"
-))
-
-# Run the app
-shiny::runApp("app.R")
-```
-
-## Usage Guide
-
-### Interactive Map Tab (Primary Interface)
-1. **Use the year slider** to navigate from 1873 to 1889
-2. **Hover over circles** to see station names and regions
-3. **Click on stations** to view detailed popup with:
-   - Total registered women
-   - Women added/removed
-   - Disease statistics (syphilis, gonorrhoea, leucorrhoea)
-   - Punishment data (fines, imprisonments)
-4. **Circle size** represents average registered women
-5. **Color** indicates geographic region
-
-### Hospital Notes Tab
-1. **Browse qualitative data** from 362 inspection reports
-2. **Search and filter** by station, year, or keywords
-3. **Read detailed notes** on:
-   - Inspection regularity (weekly, monthly, irregular)
-   - Control of unlicensed women
-   - Committee and magistrate oversight
-   - General remarks from colonial officials
-4. **Export filtered notes** for textual analysis
-
-### Lock Hospital Admissions Table
-1. **View tabular data** for all station-year records
-2. **Filter and search** to find specific stations or years
-3. **See complete admission flows**: start register → additions → removals → end register
-4. **Track disease patterns** across time and space
-5. **Export data** in CSV format for statistical analysis
-
-### Understanding the Data
-- **avg_registered**: Monthly average of women under surveillance
-- **women_added**: New women registered during the year
-- **women_removed**: Women released/removed from register
-- **fined_count** and **imprisonment_count**: Coercive enforcement measures
-- **disease counts**: Medical surveillance outcomes
-
-## Research Applications
-
-This dashboard supports multiple types of historical analysis:
-
-### Spatial Analysis
-- Map the geographic expansion of Lock Hospital surveillance (1873-1889)
-- Compare regional implementation patterns (Burma vs. Punjab vs. Madras)
-- Analyze proximity to military cantonments and railway infrastructure
-
-### Temporal Analysis
-- Track the growth and decline of the Lock Hospital system
-- Correlate with legal regime changes (Acts of 1864, 1868, 1880)
-- Identify periods of intensified or relaxed surveillance
-
-### Quantitative Analysis
-- Women's registration numbers as proxy for surveillance intensity
-- Disease statistics and medical categorization practices
-- Punishment data (fines/imprisonments) as measure of coercive enforcement
-- Troop-to-women ratios for military-medical nexus analysis
-
-### Qualitative Analysis
-- Inspection reports reveal colonial administrative practices
-- Committee notes show local resistance and negotiation
-- Remarks provide narrative context for quantitative patterns
-- Document diverse regional implementations of imperial policy
-
-### Data Integrity
-- **Coordinate validation**: All geographic coordinates verified against historical sources
-- **Backup system**: All modifications backed up to `archive/backups/`
-- **Version control**: Database changes tracked with timestamps
-
-
-## Data Sources & Provenance
-
-### Primary Sources
-- **Colonial Medical Annual Lock Hospital Reports** (1873-1889)
-- **Report on the Contagious Diseases Acts** (various years)
-- **Annual Sanitary Reports**: British India, Burma, Bengal, Madras, Bombay, Punjab
-- **Parliamentary Papers**: Reports on the operation of Contagious Diseases Acts in India
-
-
-### Research Questions Supported
-- How did legal regimes (different Acts) shape surveillance practices?
-- What do punishment records reveal about resistance and enforcement?
-- How did colonial officials describe and justify these practices?
+#### 2. Horizontal Image Gallery
+- **Scrollable card gallery** in the style of the Acts timeline
+- **Archive materials** including:
+  - Lock Hospital exterior photographs
+  - Administrative records and tables from colonial reports
+  - Screenshots of original source documents
+- **Click any image** to open full-resolution version in new tab
+  
+#### 3. Acts of Empire Timeline
+- **Horizontal scrollable timeline** of three major Contagious Diseases Acts
+- **Color-coded cards** for each Act with detailed context:
+  - **1864 Cantonments Act XXII**: "For protection of the health of the troops" - first formal regulation of "houses of ill-fame"
+  - **1868 Contagious Diseases Act XIV**: Created administrative category of "registered prostitute" with compulsory medical examination
+  - **1880 Cantonment Act III**: "Voluntary" system that expanded geographic reach under guise of reform
+- Explains how legal frameworks evolved and expanded state power over women's bodies
 
 ---
 
+### 🗺️ Interactive Map Tab
 
+The Interactive Map tab is the primary analytical interface, enabling year-by-year exploration of Lock Hospital operations and their relationship to colonial infrastructure.
+
+#### 4. Main Time-Slider Map (1873-1890)
+The centerpiece visualization showing Lock Hospital surveillance over time.
+
+**Features:**
+- **Year slider** with animation controls to play through 1873-1890
+- **Circle markers** for each station, sized by average registered women (surveillance intensity)
+- **Color-coded by region**: Burma (red), Punjab (blue), Madras (green), Bengal (orange), etc.
+- **Detailed popups** on click showing:
+  - Women on register (start/end of year)
+  - Women admitted
+  - Which Contagious Diseases Act was in force
+- **Railway stations toggle** to overlay 46 railway locations
+- **Interactive legend** showing regional color codes
+
+#### 5. Lock Hospital Admission Data Table
+- **Searchable DataTable** showing all station-year records for selected year
+- **Sortable columns** for comparative analysis
+- Complete admission flows: women registered → added → removed → end register
+- Disease counts and punishment statistics
+- Export-ready for statistical analysis
+
+#### 6. Railway Stations Table
+- **Collapsible table** showing 46 railway stations
+- Station names and geographic coordinates
+- Demonstrates colonial transportation network extent
+- Can be cross-referenced with hospital locations
+
+#### 7. Railway-Hospital Proximity Map
+**Spatial analysis visualization** showing the relationship between railway infrastructure and medical surveillance sites.
+
+## Research Questions Supported
+
+These visualizations enable investigation of:
+- Were Lock Hospitals strategically placed near railway stations and military cantonments?
+- How did regional variations shape implementation?
+
+### Temporal Questions
+- When did the system reach peak intensity? (Answer: 1880-1882, 26-27 stations)
+- How did surveillance change after each legal reform (1864, 1868, 1880)?
+- What explains the expansion in the 1880s and decline in the late 1880s?
+
+## Getting Started: Step-by-Step Guide
+
+### Prerequisites
+
+Before you begin, ensure you have the following installed on your computer:
+
+1. **R** (version 4.0 or higher)
+   - Download from: https://cran.r-project.org/
+   - Choose the version for your operating system (Windows/Mac/Linux)
+
+2. **RStudio** (recommended but optional)
+   - Download from: https://posit.co/download/rstudio-desktop/
+   - Provides a user-friendly interface for running R code
+
+### Download the Project
+
+**If you have Git installed**
+```bash
+# Open Terminal (Mac/Linux) or Command Prompt (Windows)
+cd ~/Desktop  # or wherever you want to save the project
+git clone https://github.com/meghakhanna98/medical_lock_hospitals.git
+cd medical_lock_hospitals
+---
