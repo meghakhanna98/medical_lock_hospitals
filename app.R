@@ -431,7 +431,7 @@ ui <- dashboardPage(
       tabItem(tabName = "hospital_notes",
         fluidRow(
           box(
-            title = "Hospital Notes (Cleaned)", status = "primary", solidHeader = TRUE,
+            title = "Hospital Notes", status = "primary", solidHeader = TRUE,
             width = 12,
             fluidRow(
               column(3,
